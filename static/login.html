@@ -63,12 +63,13 @@ form.addEventListener("submit", async (event) => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        username: form.elements.username.value,
+        name: form.elements.username.value,   // endpoint expects "name"
         password: form.elements.password.value,
       }),
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "Sign-in failed.");
+    localStorage.setItem("fc_user", data.user_id);  // main page reads this
     window.location.assign("/");
   } catch (e) {
     error.textContent = e.message || "Unable to sign in. Try again.";
