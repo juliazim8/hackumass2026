@@ -11,16 +11,18 @@ from fastapi import (
     HTTPException,
     Request,
     UploadFile,
+    Body
 )
 from fastapi.responses import FileResponse, RedirectResponse
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
-
+from supabase import create_client, Client
 
 # ---------- Configuration ----------
 load_dotenv()
 client = genai.Client()  # reads GEMINI_API_KEY
+sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_KEY"])
 MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 INDEX = Path(__file__).parent / "static" / "index.html"
 MAX_PHOTOS = 4
@@ -137,3 +139,59 @@ def recipes(req: RecipeRequest):
         "Include safe internal temperatures for any meat, poultry, or eggs."
     )
     return ask_gemini(prompt, Recipes).model_dump()
+
+def db(call):
+    try:
+        return call.execute().data
+    except Exception as e:
+        raise HTTPException(502, f"Database error: {str(e)[:200]}")
+
+
+# ---- user table ----
+@app.post("/api/signup")
+def signup(name: str = Body(...), password: str = Body(...)):
+    name = name.strip()
+    if not name or not password:
+        raise HTTPException(400, "Enter a name and password.")
+    if db(sb.table("user").select("user_id").eq("name", name)):
+        raise HTTPException(400, "That name is taken.")
+    row = db(sb.table("user").insert({"name": name, "password": password}))[0]
+    return {"user_id": row["user_id"]}
+
+
+@app.post("/api/login")
+def login(name: str = Body(...), password: str = Body(...)):
+    rows = db(sb.table("user").select("user_id").eq("name", name.strip()).eq("password", password))
+    if not rows:
+        raise HTTPException(401, "Wrong name or password.")
+    return {"user_id": rows[0]["user_id"]}
+
+
+@app.get("/api/users")
+def get_users():
+    return {"users": db(sb.table("user").select("user_id,name"))}
+
+
+# ---- ingredients table ----
+@app.get("/api/ingredients")
+def get_ingredients(user_id: int):
+    return {"items": db(sb.table("ingredients").select("*").eq("user_id", user_id))}
+
+
+@app.post("/api/ingredients")
+def add_ingredients(user_id: int = Body(...), items: list[str] = Body(...)):
+    rows = [{"user_id": user_id, "ingredient": n.strip()} for n in items if n.strip()]
+    if rows:
+        db(sb.table("ingredients").insert(rows))
+    return {"added": len(rows)}
+
+
+# ---- recipes table ----
+@app.get("/api/saved-recipes")
+def get_saved_recipes(user_id: int):
+    return {"recipes": db(sb.table("recipes").select("*").eq("user_id", user_id))}
+
+
+@app.post("/api/saved-recipes")
+def add_saved_recipe(user_id: int = Body(...), recipe: str = Body(...)):
+    return db(sb.table("recipes").insert({"user_id": user_id, "recipe": recipe}))[0]
