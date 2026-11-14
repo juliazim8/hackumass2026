@@ -155,7 +155,7 @@ def db(call):
 
 # ---- user table ----
 @app.post("/api/signup")
-def signup(req: AccountRequest):
+def signup(req: AccountRequest, response: Response):
     name = req.name.strip()
     if not name or not req.password:
         raise HTTPException(400, "Enter a name and password.")
@@ -164,6 +164,11 @@ def signup(req: AccountRequest):
     if db(sb.table("user").select("user_id").eq("name", name)):
         raise HTTPException(409, "That username is taken.")
     row = db(sb.table("user").insert({"name": name, "password": req.password}))[0]
+    token = secrets.token_urlsafe(32)
+    SESSIONS[token] = name
+    response.set_cookie(
+        COOKIE, token, httponly=True, samesite="lax", max_age=60 * 60 * 24 * 7
+    )
     return {"user_id": row["user_id"]}
 
 
