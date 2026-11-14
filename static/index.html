@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FridgeChef</title>
+<style>
+  :root {
+    --bg: #eef3f2; --surface: #ffffff; --ink: #10241f; --muted: #586b66;
+    --line: #cfdad7; --accent: #1f7a5c; --accent-dark: #17604832; --warn: #b4400f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.55 "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  }
+  main { max-width: 720px; margin: 0 auto; padding: 40px 20px 72px; }
+  h1 { font-size: 2.4rem; letter-spacing: -0.03em; margin: 0 0 6px; }
+  h2 { font-size: 1.25rem; margin: 0 0 12px; }
+  h3 { font-size: 1.1rem; margin: 0 0 4px; }
+  .tagline { color: var(--muted); margin: 0 0 32px; font-size: 1.1rem; }
+  section { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; margin-bottom: 20px; }
+  label { display: block; font-weight: 600; margin-bottom: 6px; }
+  input[type="text"], input[type="number"], input[type="file"] {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px;
+    font: inherit; background: #fff; color: var(--ink);
+  }
+  .row { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
+  .row > * { flex: 1 1 160px; }
+  .row > button { flex: 0 0 auto; }
+  button {
+    font: inherit; font-weight: 600; padding: 10px 18px; border-radius: 6px; cursor: pointer;
+    border: 2px solid var(--accent); background: var(--accent); color: #fff;
+  }
+  button.secondary { background: #fff; color: var(--accent); }
+  button:disabled { opacity: 0.55; cursor: wait; }
+  :focus-visible { outline: 3px solid #0b57d0; outline-offset: 2px; }
+  #status { min-height: 1.6em; margin: 0 0 16px; color: var(--muted); }
+  #status.error { color: var(--warn); font-weight: 600; }
+  ul.chips { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 0 0 16px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 12px;
+    background: #e3f1ec; border: 1px solid #b7d8cc; border-radius: 999px;
+  }
+  .chip.low { background: #fff; border-style: dashed; border-color: var(--muted); }
+  .chip button {
+    padding: 0 8px; border-radius: 999px; border: none; background: transparent;
+    color: var(--ink); font-size: 1.2rem; line-height: 1.4;
+  }
+  .hint { color: var(--muted); font-size: 0.9rem; margin: 8px 0 0; }
+  .check { display: flex; gap: 8px; align-items: center; font-weight: 400; margin: 0; }
+  .recipe { border-top: 1px solid var(--line); padding: 16px 0; }
+  .recipe:first-of-type { border-top: none; padding-top: 0; }
+  .meta { color: var(--muted); margin: 0 0 8px; }
+  .need { color: var(--warn); font-weight: 600; }
+  ol, ul.plain { padding-left: 1.2rem; margin: 6px 0 0; }
+  .shopping { background: #f6faf8; border-radius: 8px; padding: 14px 16px; margin-top: 8px; }
+  [hidden] { display: none !important; }
+  @media (prefers-reduced-motion: no-preference) { button { transition: opacity .15s; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>FridgeChef</h1>
+  <p class="tagline">Photograph your fridge. Get dinner ideas and a shopping list.</p>
+
+  <p id="status" role="status" aria-live="polite"></p>
+
+  <section id="upload">
+    <h2>Add photos</h2>
+    <label for="photos">Choose up to 4 photos of your fridge or pantry</label>
+    <input id="photos" type="file" accept="image/*" multiple>
+    <p class="hint">Shoot each shelf separately for better results.</p>
+    <p><button id="detect-btn" type="button">Find ingredients</button></p>
+  </section>
+
+  <section id="ingredients" hidden>
+    <h2>Your ingredients</h2>
+    <ul id="item-list" class="chips" aria-label="Detected ingredients"></ul>
+    <p class="hint" id="low-hint" hidden>Dashed items are low confidence. Remove any that are wrong.</p>
+    <form id="add-form" class="row">
+      <div>
+        <label for="new-item">Add something we missed</label>
+        <input id="new-item" type="text" autocomplete="off">
+      </div>
+      <button class="secondary" type="submit">Add</button>
+    </form>
+  </section>
+
+  <section id="prefs" hidden>
+    <h2>Preferences</h2>
+    <div class="row">
+      <div>
+        <label for="diet">Dietary needs</label>
+        <input id="diet" type="text" placeholder="e.g. vegetarian, no nuts">
+      </div>
+      <div>
+        <label for="minutes">Max cooking time (minutes)</label>
+        <input id="minutes" type="number" min="5" max="240" value="45">
+      </div>
+    </div>
+    <p><label class="check"><input id="staples" type="checkbox" checked> Assume salt, pepper, oil, and water</label></p>
+    <p><button id="recipes-btn" type="button">Suggest recipes</button></p>
+    <p class="hint">Dietary filters are a best effort. If you have an allergy, check every ingredient yourself.</p>
+  </section>
+
+  <section id="results" hidden>
+    <h2>Recipes</h2>
+    <div id="recipe-list"></div>
+    <div class="shopping" id="shopping" hidden>
+      <h3>Shopping list</h3>
+      <ul id="shopping-list" class="plain"></ul>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let items = [];
+
+// Build a DOM node safely (no innerHTML, so model output can't inject markup)
+function el(tag, props = {}, ...kids) {
+  const n = document.createElement(tag);
+  Object.assign(n, props);
+  kids.forEach((k) => n.append(k));
+  return n;
+}
+
+function setStatus(msg, isError = false) {
+  const s = $("status");
+  s.textContent = msg;
+  s.className = isError ? "error" : "";
+}
+
+function busy(id, on) { $(id).disabled = on; }
+
+async function api(path, options) {
+  const res = await fetch(path, options);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || "Something went wrong. Try again.");
+  return data;
+}
+
+function renderItems() {
+  const list = $("item-list");
+  list.replaceChildren();
+  items.forEach((it, i) => {
+    const label = it.quantity_estimate ? `${it.name} (${it.quantity_estimate})` : it.name;
+    const remove = el("button", { type: "button", textContent: "×" });
+    remove.setAttribute("aria-label", `Remove ${it.name}`);
+    remove.addEventListener("click", () => { items.splice(i, 1); renderItems(); });
+    const chip = el("li", { className: "chip" + (it.confidence === "low" ? " low" : "") },
+      el("span", { textContent: label }), remove);
+    list.append(chip);
+  });
+  $("low-hint").hidden = !items.some((it) => it.confidence === "low");
+}
+
+$("detect-btn").addEventListener("click", async () => {
+  const files = $("photos").files;
+  if (!files.length) return setStatus("Choose at least one photo first.", true);
+  const fd = new FormData();
+  [...files].slice(0, 4).forEach((f) => fd.append("files", f));
+  busy("detect-btn", true);
+  setStatus("Looking through your photos…");
+  try {
+    const data = await api("/api/detect", { method: "POST", body: fd });
+    items = data.items;
+    renderItems();
+    $("ingredients").hidden = false;
+    $("prefs").hidden = false;
+    setStatus(items.length
+      ? `Found ${items.length} items. Fix anything that's wrong, then suggest recipes.`
+      : "No food found. Try a clearer photo or add items by hand.");
+  } catch (e) {
+    setStatus(e.message, true);
+  } finally {
+    busy("detect-btn", false);
+  }
+});
+
+$("add-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const name = $("new-item").value.trim();
+  if (!name) return;
+  items.push({ name, quantity_estimate: "", confidence: "high" });
+  $("new-item").value = "";
+  renderItems();
+  $("new-item").focus();
+});
+
+$("recipes-btn").addEventListener("click", async () => {
+  if (!items.length) return setStatus("Add at least one ingredient.", true);
+  busy("recipes-btn", true);
+  setStatus("Cooking up ideas…");
+  try {
+    const body = {
+      items: items.map((i) => i.name),
+      diet: $("diet").value.trim(),
+      max_minutes: Number($("minutes").value) || 45,
+      assume_staples: $("staples").checked,
+    };
+    const data = await api("/api/recipes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    renderRecipes(data.recipes);
+    setStatus("");
+  } catch (e) {
+    setStatus(e.message, true);
+  } finally {
+    busy("recipes-btn", false);
+  }
+});
+
+function renderRecipes(recipes) {
+  const box = $("recipe-list");
+  box.replaceChildren();
+  const shopping = new Map();
+
+  recipes.forEach((r) => {
+    const art = el("article", { className: "recipe" });
+    art.append(el("h3", { textContent: r.title }));
+    art.append(el("p", { className: "meta", textContent: `${r.minutes} minutes` }));
+    art.append(el("p", { textContent: "You have: " + (r.uses.join(", ") || "nothing listed") }));
+    if (r.missing.length) {
+      art.append(el("p", { className: "need", textContent: "Need to buy: " + r.missing.join(", ") }));
+      r.missing.forEach((m) => shopping.set(m.toLowerCase(), m));
+    } else {
+      art.append(el("p", { textContent: "Nothing to buy." }));
+    }
+    const steps = el("ol");
+    r.steps.forEach((s) => steps.append(el("li", { textContent: s })));
+    art.append(steps);
+    box.append(art);
+  });
+
+  const list = $("shopping-list");
+  list.replaceChildren();
+  shopping.forEach((name) => list.append(el("li", { textContent: name })));
+  $("shopping").hidden = shopping.size === 0;
+  $("results").hidden = false;
+  $("results").scrollIntoView({ behavior: "smooth" });
+}
+</script>
+</body>
+</html>
