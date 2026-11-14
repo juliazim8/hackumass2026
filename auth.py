@@ -1,22 +1,15 @@
-import os
-import secrets
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, Request, Response
 from fastapi.responses import FileResponse, RedirectResponse
-from pydantic import BaseModel
 
 router = APIRouter()
 LOGIN_PAGE = Path(__file__).parent / "static" / "login.html"
+SIGNUP_PAGE = Path(__file__).parent / "static" / "signup.html"
 COOKIE = "fridgechef_session"
 
 # token -> username. Lives in memory, so everyone is logged out when the server restarts.
 SESSIONS: dict[str, str] = {}
-
-
-class LoginRequest(BaseModel):
-    username: str
-    password: str
 
 
 def logged_in_user(request: Request):
@@ -38,24 +31,11 @@ def login_page(request: Request):
     return FileResponse(LOGIN_PAGE)
 
 
-@router.post("/api/login")
-def login(req: LoginRequest, response: Response):
-    expected_user = os.getenv("APP_USERNAME", "cooked")
-    expected_pass = os.getenv("APP_PASSWORD", "fr")
-    if not expected_user or not expected_pass:
-        raise HTTPException(500, "APP_USERNAME and APP_PASSWORD are not set in .env.")
-
-    user_ok = secrets.compare_digest(req.username.encode(), expected_user.encode())
-    pass_ok = secrets.compare_digest(req.password.encode(), expected_pass.encode())
-    if not (user_ok and pass_ok):
-        raise HTTPException(401, "Incorrect username or password.")
-
-    token = secrets.token_urlsafe(32)
-    SESSIONS[token] = req.username
-    response.set_cookie(
-        COOKIE, token, httponly=True, samesite="lax", max_age=60 * 60 * 24 * 7
-    )
-    return {"ok": True}
+@router.get("/signup")
+def signup_page(request: Request):
+    if logged_in_user(request):
+        return RedirectResponse("/", status_code=303)
+    return FileResponse(SIGNUP_PAGE)
 
 
 @router.post("/api/logout")

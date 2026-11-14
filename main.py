@@ -2,7 +2,7 @@ import os
 import secrets
 from pathlib import Path
 
-from auth import current_user, logged_in_user, router as auth_router
+from auth import COOKIE, SESSIONS, current_user, logged_in_user, router as auth_router
 from dotenv import load_dotenv
 from fastapi import (
     Depends,
@@ -10,6 +10,7 @@ from fastapi import (
     File,
     HTTPException,
     Request,
+    Response,
     UploadFile,
     Body
 )
@@ -60,6 +61,11 @@ class RecipeRequest(BaseModel):
     diet: str = ""
     max_minutes: int = 45
     assume_staples: bool = True
+
+
+class AccountRequest(BaseModel):
+    name: str
+    password: str
 
 
 # ---------- Gemini helper ----------
@@ -149,21 +155,29 @@ def db(call):
 
 # ---- user table ----
 @app.post("/api/signup")
-def signup(name: str = Body(...), password: str = Body(...)):
-    name = name.strip()
-    if not name or not password:
+def signup(req: AccountRequest):
+    name = req.name.strip()
+    if not name or not req.password:
         raise HTTPException(400, "Enter a name and password.")
+    if len(req.password) < 8:
+        raise HTTPException(400, "Password must be at least 8 characters.")
     if db(sb.table("user").select("user_id").eq("name", name)):
-        raise HTTPException(400, "That name is taken.")
-    row = db(sb.table("user").insert({"name": name, "password": password}))[0]
+        raise HTTPException(409, "That username is taken.")
+    row = db(sb.table("user").insert({"name": name, "password": req.password}))[0]
     return {"user_id": row["user_id"]}
 
 
 @app.post("/api/login")
-def login(name: str = Body(...), password: str = Body(...)):
-    rows = db(sb.table("user").select("user_id").eq("name", name.strip()).eq("password", password))
-    if not rows:
-        raise HTTPException(401, "Wrong name or password.")
+def login(req: AccountRequest, response: Response):
+    name = req.name.strip()
+    rows = db(sb.table("user").select("user_id,name,password").eq("name", name))
+    if not rows or req.password != rows[0]["password"]:
+        raise HTTPException(401, "Incorrect username or password.")
+    token = secrets.token_urlsafe(32)
+    SESSIONS[token] = name
+    response.set_cookie(
+        COOKIE, token, httponly=True, samesite="lax", max_age=60 * 60 * 24 * 7
+    )
     return {"user_id": rows[0]["user_id"]}
 
 
