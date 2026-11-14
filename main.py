@@ -1,13 +1,24 @@
 import os
+import secrets
 from pathlib import Path
 
+from auth import current_user, logged_in_user, router as auth_router
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    HTTPException,
+    Request,
+    UploadFile,
+)
+from fastapi.responses import FileResponse, RedirectResponse
 from google import genai
 from google.genai import types
 from pydantic import BaseModel
 
+
+# ---------- Configuration ----------
 load_dotenv()
 client = genai.Client()  # reads GEMINI_API_KEY
 MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
@@ -16,6 +27,7 @@ MAX_PHOTOS = 4
 MAX_BYTES = 30 * 1024 * 1024
 
 app = FastAPI(title="FridgeChef")
+app.include_router(auth_router)
 
 
 # ---------- Schemas (the shape we ask Gemini to return) ----------
@@ -74,11 +86,13 @@ def ask_gemini(contents, schema):
 
 # ---------- Routes ----------
 @app.get("/")
-def home():
+def home(request: Request):
+    if not logged_in_user(request):
+        return RedirectResponse("/login", status_code=303)
     return FileResponse(INDEX)
 
 
-@app.post("/api/detect")
+@app.post("/api/detect", dependencies=[Depends(current_user)])
 async def detect(files: list[UploadFile] = File(...)):
     if not files:
         raise HTTPException(400, "Upload at least one photo.")
@@ -102,7 +116,7 @@ async def detect(files: list[UploadFile] = File(...)):
     return pantry.model_dump()
 
 
-@app.post("/api/recipes")
+@app.post("/api/recipes", dependencies=[Depends(current_user)])
 def recipes(req: RecipeRequest):
     items = [i.strip() for i in req.items if i.strip()]
     if not items:
