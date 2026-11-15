@@ -11,7 +11,7 @@ from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, Up
 from fastapi.responses import FileResponse, RedirectResponse
 from google import genai
 from google.genai import types
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from supabase import create_client, Client
 
 # ---------- Configuration ----------
@@ -67,6 +67,11 @@ class RecipeRequest(BaseModel):
 class AccountRequest(BaseModel):
     name: str
     password: str
+
+
+class SavedRecipeRequest(BaseModel):
+    title: str
+    steps: list[str] = Field(default_factory=list)
 
 
 # ---------- Gemini helper ----------
@@ -281,28 +286,53 @@ def get_saved_recipes(username: str = Depends(current_user)):
     )}
 
 @app.post("/api/saved-recipes")
-def add_saved_recipe(recipe: str = Body(...), username: str = Depends(current_user)):
+def add_saved_recipe(
+    req: SavedRecipeRequest,
+    username: str = Depends(current_user),
+):
     user_id = get_user_id(username)
 
     existing = db(
         sb.table("recipes")
         .select("*")
         .eq("user_id", user_id)
-        .eq("recipe", recipe)
+        .eq("recipe", req.title)
     )
 
     if existing:
         saved = existing[0]
         return db(
             sb.table("recipes")
-            .update({"quantity": (saved["quantity"] or 0) + 1})
+            .update({
+                "quantity": (saved["quantity"] or 0) + 1,
+                "steps": req.steps,
+            })
             .eq("id", saved["id"])
         )[0]
 
     return db(
         sb.table("recipes").insert({
             "user_id": user_id,
-            "recipe": recipe,
-            "quantity": 1
+            "recipe": req.title,
+            "quantity": 1,
+            "steps": req.steps,
         })
     )[0]
+
+
+@app.delete("/api/saved-recipes/{recipe_id}")
+def delete_saved_recipe(
+    recipe_id: int,
+    username: str = Depends(current_user),
+):
+    user_id = get_user_id(username)
+    deleted = db(
+        sb.table("recipes")
+        .delete()
+        .eq("id", recipe_id)
+        .eq("user_id", user_id)
+        .select("id")
+    )
+    if not deleted:
+        raise HTTPException(404, "Recipe not found.")
+    return {"deleted": True}
