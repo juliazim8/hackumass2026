@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, Up
 from fastapi.responses import FileResponse, RedirectResponse
 from google import genai
 from google.genai import types
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from supabase import create_client, Client
 
 # ---------- Configuration ----------
@@ -57,9 +57,6 @@ class RecipeRequest(BaseModel):
     diet: str = ""
     max_minutes: int = 45
     assume_staples: bool = True
-    allow_shopping: bool = False
-    min_missing_items: int = Field(default=1, ge=0, le=20)
-    max_missing_items: int = Field(default=3, ge=0, le=20)
 
 
 class AccountRequest(BaseModel):
@@ -151,8 +148,6 @@ def recipes(
     items = [i.strip() for i in req.items if i.strip()]
     if not items:
         raise HTTPException(400, "Add at least one ingredient.")
-    if req.min_missing_items > req.max_missing_items:
-        raise HTTPException(400, "Minimum shopping items cannot exceed the maximum.")
 
     staples = (
         "Assume salt, pepper, cooking oil, and water are available."
@@ -160,36 +155,16 @@ def recipes(
         else "Do not assume any pantry staples."
     )
 
-    shopping_rule = (
-        f"Only suggest recipes requiring between {req.min_missing_items} and "
-        f"{req.max_missing_items} distinct ingredients not on hand. List all of those "
-        "ingredients in 'missing' and do not exceed that range."
-        if req.allow_shopping
-        else "Only suggest recipes that can be made with ingredients on hand and assumed staples. "
-        "The 'missing' list must be empty for every recipe."
-    )
     prompt = (
         f"Ingredients on hand: {', '.join(items)}.\n"
         f"Dietary needs: {req.diet or 'none'}.\n"
         f"Maximum cooking time: {req.max_minutes} minutes.\n"
         f"{staples}\n"
-        "Suggest up to 3 recipes. "
-        f"{shopping_rule} "
-        "Respect the dietary needs strictly. "
+        "Suggest 3 recipes that mostly use the ingredients on hand. "
+        "Put anything not on hand in 'missing'. Respect the dietary needs strictly. "
         "Include safe internal temperatures for any meat, poultry, or eggs."
     )
-    result = ask_gemini(prompt, Recipes)
-    result.recipes = [
-        recipe for recipe in result.recipes
-        if (
-            req.min_missing_items
-            <= len({name.strip().casefold() for name in recipe.missing if name.strip()})
-            <= req.max_missing_items
-            if req.allow_shopping
-            else not recipe.missing
-        )
-    ]
-    return result.model_dump()
+    return ask_gemini(prompt, Recipes).model_dump()
 
 
 # ---------- Signup ----------
