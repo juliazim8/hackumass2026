@@ -104,6 +104,13 @@
     <p class="hint">Dietary filters are a best effort. If you have an allergy, check every ingredient yourself.</p>
   </section>
 
+  <section id="specific-dish" hidden>
+    <h2>Make a specific dish</h2>
+    <label for="dish-name">What dish would you like to make?</label>
+    <input id="dish-name" type="text" maxlength="120" placeholder="e.g. vegetable stir-fry">
+    <p><button id="specific-recipe-btn" type="button">Create recipe with my ingredients</button></p>
+  </section>
+
   <section id="results" hidden>
     <h2>Recipes</h2>
     <div id="recipe-list"></div>
@@ -169,6 +176,7 @@ $("detect-btn").addEventListener("click", async () => {
     renderItems();
     $("ingredients").hidden = false;
     $("prefs").hidden = false;
+    $("specific-dish").hidden = false;
     setStatus(items.length
       ? `Found ${items.length} items. Fix anything that's wrong, then suggest recipes.`
       : "No food found. Try a clearer photo or add items by hand.");
@@ -211,6 +219,34 @@ $("recipes-btn").addEventListener("click", async () => {
     setStatus(e.message, true);
   } finally {
     busy("recipes-btn", false);
+  }
+});
+
+$("specific-recipe-btn").addEventListener("click", async () => {
+  const dish = $("dish-name").value.trim();
+  if (!dish) return setStatus("Enter the dish you'd like to make.", true);
+  if (!items.length) return setStatus("Add at least one ingredient.", true);
+
+  busy("specific-recipe-btn", true);
+  setStatus(`Creating a recipe for ${dish}…`);
+  try {
+    const data = await api("/api/recipe-for-dish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        dish,
+        items: items.map((item) => item.name),
+        diet: $("diet").value.trim(),
+        max_minutes: Number($("minutes").value) || 45,
+        assume_staples: $("staples").checked,
+      }),
+    });
+    renderRecipes([data.recipe]);
+    setStatus("");
+  } catch (e) {
+    setStatus(e.message, true);
+  } finally {
+    busy("specific-recipe-btn", false);
   }
 });
 
