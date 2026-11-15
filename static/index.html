@@ -193,7 +193,7 @@
       </div>
       <div class="qty">
         <label for="new-quantity">Quantity</label>
-        <input id="new-quantity" type="number" min="0" step="1" inputmode="numeric" placeholder="e.g. 2">
+        <input id="new-quantity" type="number" min="0" step="1" inputmode="numeric" value="1">
       </div>
       <button class="secondary" type="submit">Add</button>
     </form>
@@ -616,9 +616,9 @@ $("add-form").addEventListener("submit", async (e) => {
     return setStatus("Quantity must be a whole number, like 2.", true);
   }
 
-  items.push({ name, quantity_estimate: toIntOrNull(qtyRaw), confidence: "high" });
+  items.push({ name, quantity_estimate: toIntOrNull(qtyRaw) ?? 1, confidence: "high" });
   $("new-item").value = "";
-  $("new-quantity").value = "";
+  $("new-quantity").value = "1";
   renderItems();
 
   try {
