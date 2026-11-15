@@ -238,7 +238,13 @@ async function loadRecipes() {
     }
 
     const recipes = (data.recipes || [])
-      .sort((a, b) => (Number(b.quantity) || 0) - (Number(a.quantity) || 0));
+      .sort((a, b) => {
+        const timeDifference =
+          Date.parse(b.last_made_at || "") - Date.parse(a.last_made_at || "");
+        return Number.isNaN(timeDifference) || timeDifference === 0
+          ? Number(b.id) - Number(a.id)
+          : timeDifference;
+      });
 
     container.innerHTML = "";
 
@@ -313,7 +319,7 @@ async function loadRecipes() {
       container.appendChild(card);
     });
 
-    status.textContent = "Ranked by how often you've made each recipe.";
+    status.textContent = "Newest recipes first.";
 
   } catch (error) {
     status.textContent = error.message;

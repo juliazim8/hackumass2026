@@ -1,5 +1,6 @@
 import os
 import secrets
+from datetime import datetime, timezone
 from pathlib import Path
 
 from auth import current_user, logged_in_user, router as auth_router
@@ -296,6 +297,7 @@ def add_saved_recipe(
     username: str = Depends(current_user),
 ):
     user_id = get_user_id(username)
+    last_made_at = datetime.now(timezone.utc).isoformat()
 
     existing = db(
         sb.table("recipes")
@@ -312,6 +314,7 @@ def add_saved_recipe(
                 "quantity": (saved["quantity"] or 0) + 1,
                 "ingredients": req.ingredients,
                 "steps": req.steps,
+                "last_made_at": last_made_at,
             })
             .eq("id", saved["id"])
         )[0]
@@ -323,6 +326,7 @@ def add_saved_recipe(
             "quantity": 1,
             "ingredients": req.ingredients,
             "steps": req.steps,
+            "last_made_at": last_made_at,
         })
     )[0]
 
