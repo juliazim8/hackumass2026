@@ -31,8 +31,9 @@ python -m venv .venv
 ## Structure
 
 main.py - API\
+autorecipe.py - Gemini endpoint for generating a recipe for a requested dish\
 static - folder for UI\
-static\index.html - main UI page\
+static\index.html - main UI page, including the specific-dish recipe feature\
 test_photos\ - test photos of fridges\
 app.py - to test gemini api connection is working (IGNORE)\
 detect.py - to test if gemini api can parse photo for ingredients (IGNORE)

@@ -3,6 +3,8 @@ import os
 import secrets
 from pathlib import Path
 
+from auth import current_user, logged_in_user, router as auth_router
+from autorecipe import router as autorecipe_router
 from auth import COOKIE, SESSIONS, current_user, logged_in_user, router as auth_router
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile, Body
@@ -23,6 +25,7 @@ MAX_BYTES = 30 * 1024 * 1024
 
 app = FastAPI(title="FridgeChef")
 app.include_router(auth_router)
+app.include_router(autorecipe_router)
 
 
 # ---------- Schemas ----------
