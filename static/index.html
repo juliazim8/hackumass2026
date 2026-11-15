@@ -6,38 +6,90 @@
 <title>FridgeChef</title>
 <style>
   :root {
-    --bg: #eef3f2; --surface: #ffffff; --ink: #10241f; --muted: #586b66;
-    --line: #cfdad7; --accent: #1f7a5c; --accent-dark: #17604832; --warn: #b4400f;
+    color-scheme: light;
+    --ink: #10241f; --muted: #586b66; --line: #cfdad7;
+    --accent: #1f7a5c; --warn: #b4400f;
   }
   * { box-sizing: border-box; }
   body {
-    margin: 0; background: var(--bg); color: var(--ink);
+    margin: 0; background: #eef3f2; color: var(--ink);
     font: 16px/1.55 "Avenir Next", "Segoe UI", system-ui, sans-serif;
   }
-  main { max-width: 720px; margin: 0 auto; padding: 40px 20px 72px; }
-  .topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-  .topbar button { flex: 0 0 auto; margin: 0; }
-  h1 { font-size: 2.4rem; letter-spacing: -0.03em; margin: 0 0 6px; }
+  button {
+    font: inherit; font-weight: 650; padding: 10px 18px; border-radius: 999px;
+    cursor: pointer; border: 1px solid var(--accent); background: var(--accent); color: #fff;
+  }
+  button.secondary { background: #fff; color: var(--ink); border-color: #d7dfdc; }
+  button:disabled { opacity: .55; cursor: wait; }
+  :focus-visible { outline: 3px solid #78d6b3; outline-offset: 3px; }
+  [hidden] { display: none !important; }
+
+  #app-header {
+    position: fixed; z-index: 3; inset: 20px 24px auto;
+    display: flex; justify-content: space-between; align-items: center; gap: 16px;
+    color: #fff;
+  }
+  body.feature-mode #app-header { color: var(--ink); }
+  .brand { margin: 0; font-size: 1.35rem; letter-spacing: -.04em; }
+  .header-actions { display: flex; align-items: center; gap: 10px; }
+  .header-actions button { padding: 9px 15px; }
+  .camera-view {
+    position: fixed; inset: 0; overflow: hidden; background: #202b28; color: #fff;
+  }
+  #camera-video, #camera-placeholder {
+    position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  }
+  #camera-video { transform: scaleX(-1); }
+  #camera-placeholder {
+    display: grid; place-items: center; padding: 110px 24px;
+    color: #e0e9e5; text-align: center;
+  }
+  .camera-shade {
+    position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(180deg, #07120f9c 0%, transparent 28%, transparent 62%, #07120fc9 100%);
+  }
+  .camera-message {
+    position: absolute; inset: 38% 24px auto; z-index: 1; text-align: center;
+    color: #fff; text-shadow: 0 1px 12px #000;
+  }
+  .camera-message p { margin: 6px 0; }
+  .capture-area {
+    position: absolute; z-index: 1; inset: auto 0 30px;
+    display: grid; justify-items: center; gap: 8px; color: #fff;
+  }
+  .capture-button {
+    width: 76px; height: 76px; padding: 0; border: 4px solid #fff;
+    background: #ffffff3d; box-shadow: 0 2px 18px #0006;
+  }
+  .capture-button::after {
+    content: ""; display: block; width: 54px; height: 54px; margin: auto;
+    border-radius: 50%; background: #fff;
+  }
+  .capture-area p { margin: 0; font-size: .9rem; text-shadow: 0 1px 8px #000; }
+
+  main { max-width: 760px; margin: 0 auto; padding: 112px 20px 72px; }
+  .page-heading { margin: 0 0 22px; }
+  .page-heading h1 { margin: 0; font-size: 2rem; letter-spacing: -.04em; }
+  .page-heading p { color: var(--muted); margin: 4px 0 0; }
+  .selected-photos { display: flex; gap: 10px; overflow-x: auto; margin: 0 0 16px; }
+  .selected-photos img { width: 92px; height: 92px; object-fit: cover; border-radius: 12px; }
+  .find-row { margin: 0 0 20px; }
+  .find-row button { min-width: 190px; }
+  section.feature-card {
+    background: #fff; border: 1px solid var(--line); border-radius: 14px;
+    padding: 20px; margin: 0 0 16px;
+  }
   h2 { font-size: 1.25rem; margin: 0 0 12px; }
   h3 { font-size: 1.1rem; margin: 0 0 4px; }
-  .tagline { color: var(--muted); margin: 0 0 32px; font-size: 1.1rem; }
-  section { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; margin-bottom: 20px; }
   label { display: block; font-weight: 600; margin-bottom: 6px; }
   input[type="text"], input[type="number"], input[type="file"] {
-    width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px;
+    width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
     font: inherit; background: #fff; color: var(--ink);
   }
   .row { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
   .row > * { flex: 1 1 160px; }
   .row > button { flex: 0 0 auto; }
-  button {
-    font: inherit; font-weight: 600; padding: 10px 18px; border-radius: 6px; cursor: pointer;
-    border: 2px solid var(--accent); background: var(--accent); color: #fff;
-  }
-  button.secondary { background: #fff; color: var(--accent); }
-  button:disabled { opacity: 0.55; cursor: wait; }
-  :focus-visible { outline: 3px solid #0b57d0; outline-offset: 2px; }
-  #status { min-height: 1.6em; margin: 0 0 16px; color: var(--muted); }
+  #status { min-height: 1.6em; margin: 0 0 12px; color: var(--muted); }
   #status.error { color: var(--warn); font-weight: 600; }
   ul.chips { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 0 0 16px; }
   .chip {
@@ -46,10 +98,10 @@
   }
   .chip.low { background: #fff; border-style: dashed; border-color: var(--muted); }
   .chip button {
-    padding: 0 8px; border-radius: 999px; border: none; background: transparent;
-    color: var(--ink); font-size: 1.2rem; line-height: 1.4;
+    padding: 0 8px; border: 0; background: transparent; color: var(--ink);
+    font-size: 1.2rem; line-height: 1.4;
   }
-  .hint { color: var(--muted); font-size: 0.9rem; margin: 8px 0 0; }
+  .hint { color: var(--muted); font-size: .9rem; margin: 8px 0 0; }
   .check { display: flex; gap: 8px; align-items: center; font-weight: 400; margin: 0; }
   .recipe { border-top: 1px solid var(--line); padding: 16px 0; }
   .recipe:first-of-type { border-top: none; padding-top: 0; }
@@ -57,29 +109,62 @@
   .need { color: var(--warn); font-weight: 600; }
   ol, ul.plain { padding-left: 1.2rem; margin: 6px 0 0; }
   .shopping { background: #f6faf8; border-radius: 8px; padding: 14px 16px; margin-top: 8px; }
-  [hidden] { display: none !important; }
-  @media (prefers-reduced-motion: no-preference) { button { transition: opacity .15s; } }
+
+  dialog {
+    width: min(520px, calc(100% - 32px)); max-height: min(88vh, 760px); padding: 0;
+    border: 0; border-radius: 20px; color: var(--ink); box-shadow: 0 20px 80px #0005;
+  }
+  dialog::backdrop { background: #07120f99; backdrop-filter: blur(4px); }
+  .dialog-content { padding: 22px; }
+  .dialog-content h2 { margin-bottom: 4px; }
+  .dialog-content > p { color: var(--muted); margin: 0 0 16px; }
+  .review-image { display: block; width: 100%; max-height: 55vh; object-fit: contain; background: #18211e; border-radius: 12px; }
+  .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+  .photo-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+  .photo-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 9px; }
+  @media (max-width: 560px) {
+    #app-header { inset: 14px 14px auto; align-items: flex-start; }
+    .brand { font-size: 1.1rem; padding-top: 7px; }
+    .header-actions { gap: 6px; }
+    .header-actions button { font-size: .83rem; padding: 8px 10px; }
+    main { padding: 94px 14px 48px; }
+    .photo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (prefers-reduced-motion: no-preference) { button { transition: opacity .15s, background-color .15s; } }
 </style>
 </head>
 <body>
-<main>
-  <header class="topbar">
-    <h1>FridgeChef</h1>
-    <button id="logout-btn" class="secondary" type="button">Sign out</button>
-  </header>
-  <p class="tagline">Photograph your fridge. Get dinner ideas and a shopping list.</p>
+<header id="app-header">
+  <p class="brand">FridgeChef</p>
+  <div class="header-actions">
+    <button class="secondary" type="button" data-open-picker>Choose photos</button>
+    <button class="secondary" type="button" data-logout>Sign out</button>
+  </div>
+</header>
 
+<section id="camera-screen" class="camera-view" aria-label="Camera preview">
+  <video id="camera-video" autoplay muted playsinline hidden></video>
+  <div id="camera-placeholder">Starting your camera…</div>
+  <div class="camera-shade"></div>
+  <div class="camera-message">
+    <p id="camera-message">Center your fridge or pantry in the frame.</p>
+  </div>
+  <div class="capture-area">
+    <button id="capture-btn" class="capture-button" type="button" aria-label="Capture photo" disabled></button>
+    <p>Tap to take a photo</p>
+  </div>
+</section>
+
+<main id="feature-page" hidden>
+  <div class="page-heading">
+    <h1>Let’s find your ingredients</h1>
+    <p>Review your photo, then identify what’s in your fridge or pantry.</p>
+  </div>
+  <div id="selected-photos" class="selected-photos" aria-label="Photos selected for ingredient search"></div>
   <p id="status" role="status" aria-live="polite"></p>
+  <p class="find-row"><button id="retake-feature-btn" class="secondary" type="button">Retake image</button></p>
 
-  <section id="upload">
-    <h2>Add photos</h2>
-    <label for="photos">Choose up to 4 photos of your fridge or pantry</label>
-    <input id="photos" type="file" accept="image/*" multiple>
-    <p class="hint">Shoot each shelf separately for better results.</p>
-    <p><button id="detect-btn" type="button">Find ingredients</button></p>
-  </section>
-
-  <section id="ingredients" hidden>
+  <section id="ingredients" class="feature-card" hidden>
     <h2>Your ingredients</h2>
     <ul id="item-list" class="chips" aria-label="Detected ingredients"></ul>
     <p class="hint" id="low-hint" hidden>Dashed items are low confidence. Remove any that are wrong.</p>
@@ -92,7 +177,7 @@
     </form>
   </section>
 
-  <section id="prefs" hidden>
+  <section id="prefs" class="feature-card" hidden>
     <h2>Preferences</h2>
     <div class="row">
       <div>
@@ -109,14 +194,14 @@
     <p class="hint">Dietary filters are a best effort. If you have an allergy, check every ingredient yourself.</p>
   </section>
 
-  <section id="specific-dish" hidden>
+  <section id="specific-dish" class="feature-card" hidden>
     <h2>Make a specific dish</h2>
     <label for="dish-name">What dish would you like to make?</label>
     <input id="dish-name" type="text" maxlength="120" placeholder="e.g. vegetable stir-fry">
     <p><button id="specific-recipe-btn" type="button">Create recipe with my ingredients</button></p>
   </section>
 
-  <section id="results" hidden>
+  <section id="results" class="feature-card" hidden>
     <h2>Recipes</h2>
     <div id="recipe-list"></div>
     <div class="shopping" id="shopping" hidden>
@@ -126,11 +211,54 @@
   </section>
 </main>
 
+<dialog id="review-dialog" aria-labelledby="review-title">
+  <div class="dialog-content">
+    <h2 id="review-title">Find ingredients</h2>
+    <p>We’ll look for ingredients in this photo.</p>
+    <img id="review-image" class="review-image" alt="Photo captured with your camera">
+    <div class="dialog-actions">
+      <button id="retake-btn" class="secondary" type="button">Retake</button>
+      <button id="review-detect-btn" type="button">Find ingredients</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="no-ingredients-dialog" aria-labelledby="no-ingredients-title">
+  <div class="dialog-content">
+    <h2 id="no-ingredients-title">No ingredients found</h2>
+    <p>We couldn’t identify any ingredients in that image. Try retaking the photo or uploading a clearer image.</p>
+    <div class="dialog-actions">
+      <button id="no-ingredients-retake-btn" class="secondary" type="button">Retake photo</button>
+      <button id="no-ingredients-upload-btn" type="button">Upload image</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="picker-dialog" aria-labelledby="picker-title">
+  <div class="dialog-content">
+    <h2 id="picker-title">Choose photos</h2>
+    <p>Select up to 4 images of your fridge or pantry.</p>
+    <label for="photos">Photos</label>
+    <input id="photos" type="file" accept="image/*" multiple>
+    <p id="picker-count" class="hint">No photos selected.</p>
+    <div id="picker-preview" class="photo-grid"></div>
+    <div class="dialog-actions">
+      <button id="cancel-picker-btn" class="secondary" type="button">Cancel</button>
+      <button id="picker-detect-btn" type="button" disabled>Find ingredients</button>
+    </div>
+  </div>
+</dialog>
+
 <script>
 const $ = (id) => document.getElementById(id);
 let items = [];
+let cameraStream = null;
+let capturedFile = null;
+let selectedFiles = [];
+let pickerFiles = [];
+let capturedUrl = "";
+let pickerUrls = [];
 
-// Build a DOM node safely (no innerHTML, so model output can't inject markup)
 function el(tag, props = {}, ...kids) {
   const n = document.createElement(tag);
   Object.assign(n, props);
@@ -139,72 +267,234 @@ function el(tag, props = {}, ...kids) {
 }
 
 function setStatus(msg, isError = false) {
-  const s = $("status");
-  s.textContent = msg;
-  s.className = isError ? "error" : "";
+  const status = $("status");
+  status.textContent = msg;
+  status.className = isError ? "error" : "";
 }
 
 function busy(id, on) { $(id).disabled = on; }
 
 async function api(path, options) {
+  if (window.location.protocol === "file:") {
+    throw new Error("Open FridgeChef through its web server to use ingredient detection.");
+  }
   const res = await fetch(path, options);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.detail || "Something went wrong. Try again.");
   return data;
 }
 
-$("logout-btn").addEventListener("click", async () => {
-  busy("logout-btn", true);
+async function startCamera() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    $("camera-placeholder").textContent = "Camera preview isn’t available here. Choose photos to continue.";
+    $("camera-message").textContent = "Allow camera access, or choose photos from your device.";
+    return;
+  }
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: "environment" } },
+    });
+    $("camera-video").srcObject = cameraStream;
+    $("camera-video").hidden = false;
+    $("camera-placeholder").hidden = true;
+    $("capture-btn").disabled = false;
+  } catch (error) {
+    $("camera-placeholder").textContent = "Camera access is unavailable. Choose photos to continue.";
+    $("camera-message").textContent = "Allow camera access in your browser settings, or choose photos.";
+  }
+}
+
+function stopCamera() {
+  cameraStream?.getTracks().forEach((track) => track.stop());
+  cameraStream = null;
+  $("camera-video").srcObject = null;
+}
+
+function showFeatures() {
+  stopCamera();
+  document.body.classList.add("feature-mode");
+  $("camera-screen").hidden = true;
+  $("feature-page").hidden = false;
+  renderSelectedPhotos();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function returnToCamera() {
+  $("no-ingredients-dialog").close();
+  $("feature-page").hidden = true;
+  document.body.classList.remove("feature-mode");
+  $("camera-screen").hidden = false;
+  $("camera-video").hidden = true;
+  $("camera-placeholder").hidden = false;
+  $("camera-placeholder").textContent = "Starting your camera…";
+  $("camera-message").textContent = "Center your fridge or pantry in the frame.";
+  startCamera();
+}
+
+function renderSelectedPhotos() {
+  const gallery = $("selected-photos");
+  gallery.replaceChildren();
+  selectedFiles.forEach((file) => {
+    const url = URL.createObjectURL(file);
+    const image = el("img", { src: url, alt: "Selected fridge or pantry photo" });
+    image.addEventListener("load", () => URL.revokeObjectURL(url), { once: true });
+    gallery.append(image);
+  });
+}
+
+const logoutButton = document.querySelector("[data-logout]");
+logoutButton.addEventListener("click", async () => {
+  const button = logoutButton;
+  button.disabled = true;
   try {
     await api("/api/logout", { method: "POST" });
     window.location.assign("/login");
-  } catch (e) {
-    setStatus(e.message, true);
-    busy("logout-btn", false);
+  } catch (error) {
+    if (!$("feature-page").hidden) setStatus(error.message, true);
+    else $("camera-message").textContent = error.message;
+    button.disabled = false;
   }
+});
+
+function openPicker() {
+  pickerFiles = [];
+  $("photos").value = "";
+  clearPickerPreview();
+  $("picker-count").textContent = "No photos selected.";
+  $("picker-detect-btn").disabled = true;
+  $("picker-dialog").showModal();
+}
+
+function clearPickerPreview() {
+  pickerUrls.forEach((url) => URL.revokeObjectURL(url));
+  pickerUrls = [];
+  $("picker-preview").replaceChildren();
+}
+
+document.querySelectorAll("[data-open-picker]").forEach((button) => {
+  button.addEventListener("click", openPicker);
+});
+
+$("photos").addEventListener("change", () => {
+  clearPickerPreview();
+  pickerFiles = [...$("photos").files];
+  const tooMany = pickerFiles.length > 4;
+  $("picker-count").textContent = tooMany
+    ? `You selected ${pickerFiles.length} photos. Choose no more than 4.`
+    : `${pickerFiles.length} photo${pickerFiles.length === 1 ? "" : "s"} selected.`;
+  $("picker-detect-btn").disabled = tooMany || pickerFiles.length === 0;
+  pickerFiles.slice(0, 4).forEach((file) => {
+    const url = URL.createObjectURL(file);
+    pickerUrls.push(url);
+    $("picker-preview").append(el("img", { src: url, alt: "Selected photo preview" }));
+  });
+});
+
+$("cancel-picker-btn").addEventListener("click", () => $("picker-dialog").close());
+
+$("capture-btn").addEventListener("click", () => {
+  const video = $("camera-video");
+  if (!video.videoWidth || !video.videoHeight) {
+    $("camera-message").textContent = "The camera is still starting. Try again in a moment.";
+    return;
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext("2d").drawImage(video, 0, 0);
+  canvas.toBlob((blob) => {
+    if (!blob) {
+      $("camera-message").textContent = "Couldn’t capture that photo. Please try again.";
+      return;
+    }
+    capturedFile = new File([blob], "fridge-capture.jpg", { type: "image/jpeg" });
+    if (capturedUrl) URL.revokeObjectURL(capturedUrl);
+    capturedUrl = URL.createObjectURL(blob);
+    $("review-image").src = capturedUrl;
+    $("review-dialog").showModal();
+  }, "image/jpeg", 0.92);
+});
+
+$("retake-btn").addEventListener("click", () => {
+  $("review-dialog").close();
+  capturedFile = null;
+});
+
+$("review-detect-btn").addEventListener("click", () => {
+  if (!capturedFile) return;
+  selectedFiles = [capturedFile];
+  $("review-dialog").close();
+  findIngredients(selectedFiles);
+});
+
+async function findIngredients(files) {
+  if (!files.length) {
+    setStatus("Choose at least one photo first.", true);
+    return;
+  }
+  selectedFiles = files.slice(0, 4);
+  showFeatures();
+  $("ingredients").hidden = true;
+  $("prefs").hidden = true;
+  $("specific-dish").hidden = true;
+  $("results").hidden = true;
+  items = [];
+  busy("picker-detect-btn", true);
+  setStatus("Looking through your photos…");
+  const formData = new FormData();
+  selectedFiles.forEach((file) => formData.append("files", file));
+  try {
+    const data = await api("/api/detect", { method: "POST", body: formData });
+    items = data.items;
+    renderItems();
+    if (items.length) {
+      $("ingredients").hidden = false;
+      $("prefs").hidden = false;
+      $("specific-dish").hidden = false;
+      setStatus(`Found ${items.length} items. Fix anything that's wrong, then suggest recipes.`);
+    } else {
+      setStatus("No ingredients found.");
+      $("no-ingredients-dialog").showModal();
+    }
+  } catch (error) {
+    setStatus(error.message, true);
+  } finally {
+    busy("picker-detect-btn", false);
+  }
+}
+
+$("no-ingredients-retake-btn").addEventListener("click", returnToCamera);
+$("no-ingredients-upload-btn").addEventListener("click", () => {
+  $("no-ingredients-dialog").close();
+  openPicker();
+});
+
+$("retake-feature-btn").addEventListener("click", returnToCamera);
+$("picker-detect-btn").addEventListener("click", async () => {
+  if (!pickerFiles.length || pickerFiles.length > 4) return;
+  selectedFiles = [...pickerFiles];
+  $("picker-dialog").close();
+  await findIngredients(selectedFiles);
 });
 
 function renderItems() {
   const list = $("item-list");
   list.replaceChildren();
-  items.forEach((it, i) => {
-    const label = it.quantity_estimate ? `${it.name} (${it.quantity_estimate})` : it.name;
+  items.forEach((item, index) => {
+    const label = item.quantity_estimate ? `${item.name} (${item.quantity_estimate})` : item.name;
     const remove = el("button", { type: "button", textContent: "×" });
-    remove.setAttribute("aria-label", `Remove ${it.name}`);
-    remove.addEventListener("click", () => { items.splice(i, 1); renderItems(); });
-    const chip = el("li", { className: "chip" + (it.confidence === "low" ? " low" : "") },
-      el("span", { textContent: label }), remove);
-    list.append(chip);
+    remove.setAttribute("aria-label", `Remove ${item.name}`);
+    remove.addEventListener("click", () => { items.splice(index, 1); renderItems(); });
+    list.append(el("li", {
+      className: "chip" + (item.confidence === "low" ? " low" : ""),
+    }, el("span", { textContent: label }), remove));
   });
-  $("low-hint").hidden = !items.some((it) => it.confidence === "low");
+  $("low-hint").hidden = !items.some((item) => item.confidence === "low");
 }
 
-$("detect-btn").addEventListener("click", async () => {
-  const files = $("photos").files;
-  if (!files.length) return setStatus("Choose at least one photo first.", true);
-  const fd = new FormData();
-  [...files].slice(0, 4).forEach((f) => fd.append("files", f));
-  busy("detect-btn", true);
-  setStatus("Looking through your photos…");
-  try {
-    const data = await api("/api/detect", { method: "POST", body: fd });
-    items = data.items;
-    renderItems();
-    $("ingredients").hidden = false;
-    $("prefs").hidden = false;
-    $("specific-dish").hidden = false;
-    setStatus(items.length
-      ? `Found ${items.length} items. Fix anything that's wrong, then suggest recipes.`
-      : "No food found. Try a clearer photo or add items by hand.");
-  } catch (e) {
-    setStatus(e.message, true);
-  } finally {
-    busy("detect-btn", false);
-  }
-});
-
-$("add-form").addEventListener("submit", (e) => {
-  e.preventDefault();
+$("add-form").addEventListener("submit", (event) => {
+  event.preventDefault();
   const name = $("new-item").value.trim();
   if (!name) return;
   items.push({ name, quantity_estimate: "", confidence: "high" });
@@ -218,21 +508,20 @@ $("recipes-btn").addEventListener("click", async () => {
   busy("recipes-btn", true);
   setStatus("Cooking up ideas…");
   try {
-    const body = {
-      items: items.map((i) => i.name),
-      diet: $("diet").value.trim(),
-      max_minutes: Number($("minutes").value) || 45,
-      assume_staples: $("staples").checked,
-    };
     const data = await api("/api/recipes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        items: items.map((item) => item.name),
+        diet: $("diet").value.trim(),
+        max_minutes: Number($("minutes").value) || 45,
+        assume_staples: $("staples").checked,
+      }),
     });
     renderRecipes(data.recipes);
     setStatus("");
-  } catch (e) {
-    setStatus(e.message, true);
+  } catch (error) {
+    setStatus(error.message, true);
   } finally {
     busy("recipes-btn", false);
   }
@@ -242,7 +531,6 @@ $("specific-recipe-btn").addEventListener("click", async () => {
   const dish = $("dish-name").value.trim();
   if (!dish) return setStatus("Enter the dish you'd like to make.", true);
   if (!items.length) return setStatus("Add at least one ingredient.", true);
-
   busy("specific-recipe-btn", true);
   setStatus(`Creating a recipe for ${dish}…`);
   try {
@@ -259,8 +547,8 @@ $("specific-recipe-btn").addEventListener("click", async () => {
     });
     renderRecipes([data.recipe]);
     setStatus("");
-  } catch (e) {
-    setStatus(e.message, true);
+  } catch (error) {
+    setStatus(error.message, true);
   } finally {
     busy("specific-recipe-btn", false);
   }
@@ -270,24 +558,26 @@ function renderRecipes(recipes) {
   const box = $("recipe-list");
   box.replaceChildren();
   const shopping = new Map();
-
-  recipes.forEach((r) => {
-    const art = el("article", { className: "recipe" });
-    art.append(el("h3", { textContent: r.title }));
-    art.append(el("p", { className: "meta", textContent: `${r.minutes} minutes` }));
-    art.append(el("p", { textContent: "You have: " + (r.uses.join(", ") || "nothing listed") }));
-    if (r.missing.length) {
-      art.append(el("p", { className: "need", textContent: "Need to buy: " + r.missing.join(", ") }));
-      r.missing.forEach((m) => shopping.set(m.toLowerCase(), m));
+  recipes.forEach((recipe) => {
+    const article = el("article", { className: "recipe" });
+    article.append(el("h3", { textContent: recipe.title }));
+    article.append(el("p", { className: "meta", textContent: `${recipe.minutes} minutes` }));
+    article.append(el("p", {
+      textContent: "You have: " + (recipe.uses.join(", ") || "nothing listed"),
+    }));
+    if (recipe.missing.length) {
+      article.append(el("p", {
+        className: "need", textContent: "Need to buy: " + recipe.missing.join(", "),
+      }));
+      recipe.missing.forEach((name) => shopping.set(name.toLowerCase(), name));
     } else {
-      art.append(el("p", { textContent: "Nothing to buy." }));
+      article.append(el("p", { textContent: "Nothing to buy." }));
     }
     const steps = el("ol");
-    r.steps.forEach((s) => steps.append(el("li", { textContent: s })));
-    art.append(steps);
-    box.append(art);
+    recipe.steps.forEach((step) => steps.append(el("li", { textContent: step })));
+    article.append(steps);
+    box.append(article);
   });
-
   const list = $("shopping-list");
   list.replaceChildren();
   shopping.forEach((name) => list.append(el("li", { textContent: name })));
@@ -295,6 +585,9 @@ function renderRecipes(recipes) {
   $("results").hidden = false;
   $("results").scrollIntoView({ behavior: "smooth" });
 }
+
+window.addEventListener("pagehide", stopCamera);
+startCamera();
 </script>
 </body>
 </html>
