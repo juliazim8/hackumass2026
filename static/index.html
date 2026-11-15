@@ -512,9 +512,6 @@ async function findIngredients(files) {
       $("specific-dish").hidden = false;
     }
 
-    // main: always persist the detected list
-    await saveIngredients();
-
     if (items.length) {
       setStatus(`Found and saved ${items.length} items. Fix anything that's wrong, then suggest recipes.`);
     } else {

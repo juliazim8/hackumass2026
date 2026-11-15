@@ -107,6 +107,38 @@ def get_user_id(username: str):
     return users[0]["user_id"]
 
 
+def replace_user_ingredients(user_id: int, items: list[Ingredient]) -> int:
+    rows = [
+        {
+            "user_id": user_id,
+            "ingredient": item.name.strip(),
+            "quantity_estimate": (
+                int(item.quantity_estimate.strip())
+                if item.quantity_estimate.strip().isdecimal()
+                else None
+            ),
+        }
+        for item in items
+        if item.name.strip()
+    ]
+
+    db(sb.table("ingredients").delete().eq("user_id", user_id))
+    remaining = db(
+        sb.table("ingredients")
+        .select("id")
+        .eq("user_id", user_id)
+    )
+    if remaining:
+        raise HTTPException(
+            502,
+            "Could not remove the previous ingredient list. No new ingredients were added.",
+        )
+
+    if rows:
+        db(sb.table("ingredients").insert(rows))
+    return len(rows)
+
+
 # ---------- Routes ----------
 @app.get("/")
 def home(request: Request):
@@ -140,6 +172,7 @@ async def detect(
     )
 
     pantry = ask_gemini(parts, Pantry)
+    replace_user_ingredients(get_user_id(username), pantry.items)
     return pantry.model_dump()
 
 
@@ -232,21 +265,7 @@ def add_ingredients(
     username: str = Depends(current_user),
 ):
     user_id = get_user_id(username)
-
-    rows = [
-        {
-            "user_id": user_id,
-            "ingredient": item.name.strip(),
-            "quantity_estimate": item.quantity_estimate.strip(),
-        }
-        for item in req.items
-        if item.name.strip()
-    ]
-
-    if rows:
-        db(sb.table("ingredients").insert(rows))
-
-    return {"added": len(rows)}
+    return {"added": replace_user_ingredients(user_id, req.items)}
 
 
 # ---------- Saved recipes ----------
