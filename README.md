@@ -30,7 +30,7 @@ python -m venv .venv
 ## Recipe history setup
 
 Run [`database/recipe_history_steps.sql`](database/recipe_history_steps.sql) in the Supabase SQL Editor
-to add storage for recipe steps before saving recipes from the app.
+to add storage for recipe ingredients and steps before saving recipes from the app.
 
 
 ## Structure

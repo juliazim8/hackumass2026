@@ -194,6 +194,9 @@
     <h2 id="dialog-recipe-name"></h2>
     <button id="recipe-dialog-back" type="button">Back</button>
   </div>
+  <h3>Ingredients</h3>
+  <ul id="dialog-recipe-ingredients" class="recipe-ingredients"></ul>
+  <h3>Steps</h3>
   <ol id="dialog-recipe-steps" class="recipe-steps"></ol>
 </dialog>
 
@@ -272,6 +275,7 @@ async function loadRecipes() {
             credentials: "same-origin",
             body: JSON.stringify({
               title: recipe.recipe,
+              ingredients: Array.isArray(recipe.ingredients) ? recipe.ingredients : [],
               steps: Array.isArray(recipe.steps) ? recipe.steps : [],
             })
           });
@@ -319,6 +323,20 @@ async function loadRecipes() {
 function showRecipe(recipe) {
   const dialog = document.getElementById("recipe-dialog");
   document.getElementById("dialog-recipe-name").textContent = recipe.recipe;
+  const ingredients = document.getElementById("dialog-recipe-ingredients");
+  ingredients.replaceChildren();
+  if (Array.isArray(recipe.ingredients) && recipe.ingredients.length) {
+    recipe.ingredients.forEach((ingredient) => {
+      const item = document.createElement("li");
+      item.textContent = ingredient;
+      ingredients.append(item);
+    });
+  } else {
+    const item = document.createElement("li");
+    item.textContent = "No saved ingredients are available for this recipe.";
+    ingredients.append(item);
+  }
+
   const steps = document.getElementById("dialog-recipe-steps");
   steps.replaceChildren();
   if (Array.isArray(recipe.steps) && recipe.steps.length) {

@@ -794,7 +794,11 @@ function renderRecipes(recipes) {
         await api("/api/saved-recipes", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: recipe.title, steps: recipe.steps })
+          body: JSON.stringify({
+            title: recipe.title,
+            ingredients: [...new Set([...recipe.uses, ...recipe.missing])],
+            steps: recipe.steps,
+          })
         });
 
         savedRecipeTitles.add(recipe.title);

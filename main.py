@@ -70,6 +70,7 @@ class AccountRequest(BaseModel):
 
 class SavedRecipeRequest(BaseModel):
     title: str
+    ingredients: list[str] = Field(default_factory=list)
     steps: list[str] = Field(default_factory=list)
 
 
@@ -309,6 +310,7 @@ def add_saved_recipe(
             sb.table("recipes")
             .update({
                 "quantity": (saved["quantity"] or 0) + 1,
+                "ingredients": req.ingredients,
                 "steps": req.steps,
             })
             .eq("id", saved["id"])
@@ -319,6 +321,7 @@ def add_saved_recipe(
             "user_id": user_id,
             "recipe": req.title,
             "quantity": 1,
+            "ingredients": req.ingredients,
             "steps": req.steps,
         })
     )[0]
