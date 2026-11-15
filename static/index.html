@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>FridgeChef</title>
+<title>CookAI</title>
 <style>
   :root {
     color-scheme: light;
@@ -150,7 +150,7 @@
 </head>
 <body>
 <header id="app-header">
-  <p class="brand">FridgeChef</p>
+  <p class="brand">CookAI</p>
   <div class="header-actions">
     <button class="secondary" type="button" data-open-picker>Choose photos</button>
     <button onclick="window.location.href='recommended_recipes.html'">
@@ -340,7 +340,7 @@ function toIntOrNull(v) {
 // Merged: andy's file:// guard + main's default `options = {}`
 async function api(path, options = {}) {
   if (window.location.protocol === "file:") {
-    throw new Error("Open FridgeChef through its web server to use ingredient detection.");
+    throw new Error("Open CookAI through its web server to use ingredient detection.");
   }
   const res = await fetch(path, options);
   const data = await res.json().catch(() => ({}));

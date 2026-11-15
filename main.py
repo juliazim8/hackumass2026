@@ -24,7 +24,7 @@ RECOMMENDED_RECIPES = Path(__file__).parent / "static" / "recommended_recipes.ht
 MAX_PHOTOS = 4
 MAX_BYTES = 30 * 1024 * 1024
 
-app = FastAPI(title="FridgeChef")
+app = FastAPI(title="CookAI")
 app.include_router(auth_router)
 app.include_router(autorecipe_router)
 

@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 router = APIRouter()
 LOGIN_PAGE = Path(__file__).parent / "static" / "login.html"
 SIGNUP_PAGE = Path(__file__).parent / "static" / "signup.html"
-COOKIE = "fridgechef_session"
+COOKIE = "cookai_session"
 
 # token -> username. Lives in memory, so everyone is logged out when the server restarts.
 SESSIONS: dict[str, str] = {}
