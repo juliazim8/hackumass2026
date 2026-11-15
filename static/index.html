@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -15,8 +16,6 @@
     font: 16px/1.55 "Avenir Next", "Segoe UI", system-ui, sans-serif;
   }
   main { max-width: 720px; margin: 0 auto; padding: 40px 20px 72px; }
-  .topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-  .topbar button { flex: 0 0 auto; margin: 0; }
   h1 { font-size: 2.4rem; letter-spacing: -0.03em; margin: 0 0 6px; }
   h2 { font-size: 1.25rem; margin: 0 0 12px; }
   h3 { font-size: 1.1rem; margin: 0 0 4px; }
@@ -63,10 +62,7 @@
 </head>
 <body>
 <main>
-  <header class="topbar">
-    <h1>FridgeChef</h1>
-    <button id="logout-btn" class="secondary" type="button">Sign out</button>
-  </header>
+  <h1>FridgeChef</h1>
   <p class="tagline">Photograph your fridge. Get dinner ideas and a shopping list.</p>
 
   <p id="status" role="status" aria-live="polite"></p>
@@ -123,7 +119,6 @@
 const $ = (id) => document.getElementById(id);
 let items = [];
 
-// Build a DOM node safely (no innerHTML, so model output can't inject markup)
 function el(tag, props = {}, ...kids) {
   const n = document.createElement(tag);
   Object.assign(n, props);
@@ -137,56 +132,89 @@ function setStatus(msg, isError = false) {
   s.className = isError ? "error" : "";
 }
 
-function busy(id, on) { $(id).disabled = on; }
+function busy(id, on) {
+  $(id).disabled = on;
+}
 
-async function api(path, options) {
+async function api(path, options = {}) {
   const res = await fetch(path, options);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.detail || "Something went wrong. Try again.");
   return data;
 }
 
-$("logout-btn").addEventListener("click", async () => {
-  busy("logout-btn", true);
-  try {
-    await api("/api/logout", { method: "POST" });
-    window.location.assign("/login");
-  } catch (e) {
-    setStatus(e.message, true);
-    busy("logout-btn", false);
-  }
-});
+// Save the current ingredient list, including quantities.
+async function saveIngredients() {
+  return api("/api/ingredients", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items })
+  });
+}
 
 function renderItems() {
   const list = $("item-list");
   list.replaceChildren();
+
+  console.log("Ingredients:", items);
+
   items.forEach((it, i) => {
-    const label = it.quantity_estimate ? `${it.name} (${it.quantity_estimate})` : it.name;
+    const label = it.quantity_estimate
+      ? `${it.name} (${it.quantity_estimate})`
+      : it.name;
+
     const remove = el("button", { type: "button", textContent: "×" });
     remove.setAttribute("aria-label", `Remove ${it.name}`);
-    remove.addEventListener("click", () => { items.splice(i, 1); renderItems(); });
-    const chip = el("li", { className: "chip" + (it.confidence === "low" ? " low" : "") },
-      el("span", { textContent: label }), remove);
+
+    remove.addEventListener("click", async () => {
+      items.splice(i, 1);
+      renderItems();
+
+      try {
+        await saveIngredients();
+        setStatus("Ingredient removed.");
+      } catch (e) {
+        setStatus(e.message, true);
+      }
+    });
+
+    const chip = el(
+      "li",
+      { className: "chip" + (it.confidence === "low" ? " low" : "") },
+      el("span", { textContent: label }),
+      remove
+    );
+
     list.append(chip);
   });
+
   $("low-hint").hidden = !items.some((it) => it.confidence === "low");
 }
 
+// Detect ingredients and save them to Supabase.
 $("detect-btn").addEventListener("click", async () => {
   const files = $("photos").files;
   if (!files.length) return setStatus("Choose at least one photo first.", true);
+
   const fd = new FormData();
   [...files].slice(0, 4).forEach((f) => fd.append("files", f));
+
   busy("detect-btn", true);
   setStatus("Looking through your photos…");
+
   try {
     const data = await api("/api/detect", { method: "POST", body: fd });
     items = data.items;
+
     renderItems();
+
     $("ingredients").hidden = false;
     $("prefs").hidden = false;
+
+    await saveIngredients();
+
     setStatus(items.length
-      ? `Found ${items.length} items. Fix anything that's wrong, then suggest recipes.`
+      ? `Found and saved ${items.length} items. Fix anything that's wrong, then suggest recipes.`
       : "No food found. Try a clearer photo or add items by hand.");
   } catch (e) {
     setStatus(e.message, true);
@@ -195,20 +223,34 @@ $("detect-btn").addEventListener("click", async () => {
   }
 });
 
-$("add-form").addEventListener("submit", (e) => {
+// Add an ingredient manually and save the updated list.
+$("add-form").addEventListener("submit", async (e) => {
   e.preventDefault();
+
   const name = $("new-item").value.trim();
   if (!name) return;
+
   items.push({ name, quantity_estimate: "", confidence: "high" });
   $("new-item").value = "";
   renderItems();
+
+  try {
+    await saveIngredients();
+    setStatus(`${name} added and saved.`);
+  } catch (e) {
+    setStatus(e.message, true);
+  }
+
   $("new-item").focus();
 });
 
+// Generate recipes.
 $("recipes-btn").addEventListener("click", async () => {
   if (!items.length) return setStatus("Add at least one ingredient.", true);
+
   busy("recipes-btn", true);
   setStatus("Cooking up ideas…");
+
   try {
     const body = {
       items: items.map((i) => i.name),
@@ -216,11 +258,13 @@ $("recipes-btn").addEventListener("click", async () => {
       max_minutes: Number($("minutes").value) || 45,
       assume_staples: $("staples").checked,
     };
+
     const data = await api("/api/recipes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
+
     renderRecipes(data.recipes);
     setStatus("");
   } catch (e) {
@@ -240,12 +284,14 @@ function renderRecipes(recipes) {
     art.append(el("h3", { textContent: r.title }));
     art.append(el("p", { className: "meta", textContent: `${r.minutes} minutes` }));
     art.append(el("p", { textContent: "You have: " + (r.uses.join(", ") || "nothing listed") }));
+
     if (r.missing.length) {
       art.append(el("p", { className: "need", textContent: "Need to buy: " + r.missing.join(", ") }));
       r.missing.forEach((m) => shopping.set(m.toLowerCase(), m));
     } else {
       art.append(el("p", { textContent: "Nothing to buy." }));
     }
+
     const steps = el("ol");
     r.steps.forEach((s) => steps.append(el("li", { textContent: s })));
     art.append(steps);
@@ -255,6 +301,7 @@ function renderRecipes(recipes) {
   const list = $("shopping-list");
   list.replaceChildren();
   shopping.forEach((name) => list.append(el("li", { textContent: name })));
+
   $("shopping").hidden = shopping.size === 0;
   $("results").hidden = false;
   $("results").scrollIntoView({ behavior: "smooth" });
