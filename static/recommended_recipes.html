@@ -81,18 +81,38 @@
     border-radius: 13px;
   }
 
-  .recipe-info {
-    flex: 1;
+  .recipe-actions {
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: 6px;
-    text-align: center;
+    gap: 10px;
   }
+
+  .delete-recipe {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    background: #a83e36;
+    font-size: 24px;
+    line-height: 1;
+  }
+
+  .confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 24px;
+  }
+
+  .cancel-delete { background: #586b66; }
 
   .recipe-name {
     font-size: 18px;
     font-weight: bold;
+  }
+
+  .recipe-meta {
+    display: grid;
+    gap: 6px;
   }
 
   .recipe-count {
@@ -100,6 +120,31 @@
     font-size: 14px;
     font-weight: bold;
   }
+
+  dialog {
+    width: min(560px, calc(100% - 32px));
+    max-height: 85vh;
+    padding: 24px;
+    border: 0;
+    border-radius: 16px;
+    color: var(--ink);
+    box-shadow: 0 18px 60px #0004;
+  }
+
+  dialog::backdrop { background: #10241f88; }
+
+  .dialog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .dialog-header h2 { margin: 0; }
+  .dialog-header button { flex: 0 0 auto; }
+  .recipe-steps { padding-left: 24px; }
+  .recipe-steps li { margin: 0 0 12px; }
 
   #status {
     color: var(--muted);
@@ -130,12 +175,12 @@
 
   <header>
     <div>
-      <h1>Recommended Recipes</h1>
-      <div class="subtitle">Your most frequently made recipes.</div>
+      <h1>Recipe History</h1>
+      <div class="subtitle">Recipes you’ve made and saved.</div>
     </div>
 
-    <button onclick="window.location.href='/'">
-      Back to Home
+    <button id="back-btn" type="button">
+      Back
     </button>
   </header>
 
@@ -144,7 +189,36 @@
 
 </div>
 
+<dialog id="recipe-dialog" aria-labelledby="dialog-recipe-name">
+  <div class="dialog-header">
+    <h2 id="dialog-recipe-name"></h2>
+    <button id="recipe-dialog-back" type="button">Back</button>
+  </div>
+  <ol id="dialog-recipe-steps" class="recipe-steps"></ol>
+</dialog>
+
+<dialog id="delete-recipe-dialog" aria-labelledby="delete-recipe-title">
+  <h2 id="delete-recipe-title">Delete recipe?</h2>
+  <p>Delete <strong id="delete-recipe-name"></strong> from your recipe history?</p>
+  <div class="confirm-actions">
+    <button id="cancel-delete" class="cancel-delete" type="button">Cancel</button>
+    <button id="confirm-delete" type="button">Delete</button>
+  </div>
+</dialog>
+
 <script>
+let recipeToDelete = null;
+
+document.getElementById("back-btn").addEventListener("click", () => {
+  if (sessionStorage.getItem("fridgechef-return-state")) {
+    window.location.assign("/?return=previous");
+  } else if (window.history.length > 1) {
+    window.history.back();
+  } else {
+    window.location.assign("/");
+  }
+});
+
 async function loadRecipes() {
   const container = document.getElementById("recipes");
   const status = document.getElementById("status");
@@ -179,24 +253,9 @@ async function loadRecipes() {
       const card = document.createElement("div");
       card.className = "recipe-card";
 
-      const info = document.createElement("div");
-      info.className = "recipe-info";
-
       const name = document.createElement("div");
       name.className = "recipe-name";
       name.textContent = recipe.recipe;
-
-      const count = document.createElement("div");
-      count.className = "recipe-count";
-
-      const updateCount = () => {
-        const quantity = Number(recipe.quantity) || 0;
-        count.textContent = `${quantity} ${quantity === 1 ? "time" : "times"} made`;
-      };
-
-      updateCount();
-
-      info.append(name, count);
 
       const button = document.createElement("button");
       button.textContent = "Make Again";
@@ -211,7 +270,10 @@ async function loadRecipes() {
               "Content-Type": "application/json"
             },
             credentials: "same-origin",
-            body: JSON.stringify(recipe.recipe)
+            body: JSON.stringify({
+              title: recipe.recipe,
+              steps: Array.isArray(recipe.steps) ? recipe.steps : [],
+            })
           });
 
           const result = await saveResponse.json();
@@ -219,18 +281,31 @@ async function loadRecipes() {
           if (!saveResponse.ok) {
             throw new Error(result.detail || "Could not update recipe.");
           }
-
           recipe.quantity = result.quantity;
-          updateCount();
+          showRecipe(recipe);
 
         } catch (error) {
-          alert(error.message);
+          status.textContent = error.message;
         } finally {
           button.disabled = false;
         }
       };
 
-      card.append(info, button);
+      const deleteButton = document.createElement("button");
+      deleteButton.className = "delete-recipe";
+      deleteButton.type = "button";
+      deleteButton.textContent = "×";
+      deleteButton.setAttribute("aria-label", `Delete ${recipe.recipe} from history`);
+      deleteButton.addEventListener("click", () => {
+        recipeToDelete = recipe;
+        document.getElementById("delete-recipe-name").textContent = recipe.recipe;
+        document.getElementById("delete-recipe-dialog").showModal();
+      });
+
+      const actions = document.createElement("div");
+      actions.className = "recipe-actions";
+      actions.append(button, deleteButton);
+      card.append(name, actions);
       container.appendChild(card);
     });
 
@@ -240,6 +315,60 @@ async function loadRecipes() {
     status.textContent = error.message;
   }
 }
+
+function showRecipe(recipe) {
+  const dialog = document.getElementById("recipe-dialog");
+  document.getElementById("dialog-recipe-name").textContent = recipe.recipe;
+  const steps = document.getElementById("dialog-recipe-steps");
+  steps.replaceChildren();
+  if (Array.isArray(recipe.steps) && recipe.steps.length) {
+    recipe.steps.forEach((step) => {
+      const item = document.createElement("li");
+      item.textContent = step;
+      steps.append(item);
+    });
+  } else {
+    const item = document.createElement("li");
+    item.textContent = "No saved steps are available for this recipe.";
+    steps.append(item);
+  }
+  dialog.showModal();
+}
+
+document.getElementById("recipe-dialog-back").addEventListener("click", () => {
+  document.getElementById("recipe-dialog").close();
+});
+
+document.getElementById("cancel-delete").addEventListener("click", () => {
+  document.getElementById("delete-recipe-dialog").close();
+  recipeToDelete = null;
+});
+
+document.getElementById("confirm-delete").addEventListener("click", async (event) => {
+  if (!recipeToDelete) return;
+
+  const button = event.currentTarget;
+  const status = document.getElementById("status");
+  button.disabled = true;
+  try {
+    const response = await fetch(
+      `/api/saved-recipes/${encodeURIComponent(recipeToDelete.id)}`,
+      { method: "DELETE", credentials: "same-origin" }
+    );
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.detail || "Could not delete recipe.");
+    }
+
+    document.getElementById("delete-recipe-dialog").close();
+    recipeToDelete = null;
+    await loadRecipes();
+  } catch (error) {
+    status.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
 
 loadRecipes();
 </script>

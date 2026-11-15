@@ -153,8 +153,8 @@
   <p class="brand">CookAI</p>
   <div class="header-actions">
     <button class="secondary" type="button" data-open-picker>Choose photos</button>
-    <button onclick="window.location.href='recommended_recipes.html'">
-      Recommended Recipes
+    <button id="recommended-recipes-btn" type="button">
+      Recipe History
     </button>
     <button class="secondary" type="button" data-logout>Sign out</button>
   </div>
@@ -294,12 +294,49 @@
 <script>
 const $ = (id) => document.getElementById(id);
 let items = [];
+let generatedRecipes = null;
+let savedRecipeTitles = new Set();
 let cameraStream = null;
 let capturedFile = null;
 let selectedFiles = [];
 let pickerFiles = [];
 let capturedUrl = "";
 let pickerUrls = [];
+
+function openReturnPhotoStore() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open("fridgechef-navigation", 1);
+    request.onupgradeneeded = () => {
+      request.result.createObjectStore("state");
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function saveReturnPhotos(files) {
+  const database = await openReturnPhotoStore();
+  await new Promise((resolve, reject) => {
+    const transaction = database.transaction("state", "readwrite");
+    transaction.objectStore("state").put(files, "selected-photos");
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error);
+  });
+  database.close();
+}
+
+async function loadReturnPhotos() {
+  const database = await openReturnPhotoStore();
+  const files = await new Promise((resolve, reject) => {
+    const transaction = database.transaction("state", "readonly");
+    const request = transaction.objectStore("state").get("selected-photos");
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  });
+  database.close();
+  return files;
+}
 
 function el(tag, props = {}, ...kids) {
   const n = document.createElement(tag);
@@ -667,6 +704,7 @@ $("recipes-btn").addEventListener("click", async () => {
       }),
     });
 
+    savedRecipeTitles.clear();
     renderRecipes(data.recipes);
     setStatus("");
   } catch (error) {
@@ -701,6 +739,7 @@ $("specific-recipe-btn").addEventListener("click", async () => {
         assume_staples: $("staples").checked,
       }),
     });
+    savedRecipeTitles.clear();
     renderRecipes([data.recipe]);
     setStatus("");
   } catch (error) {
@@ -711,6 +750,7 @@ $("specific-recipe-btn").addEventListener("click", async () => {
 });
 
 function renderRecipes(recipes) {
+  generatedRecipes = recipes;
   const box = $("recipe-list");
   box.replaceChildren();
   const shopping = new Map();
@@ -742,7 +782,8 @@ function renderRecipes(recipes) {
     // Save recipe using the logged-in user's session.
     const saveBtn = el("button", {
       type: "button",
-      textContent: "Make Recipe"
+      textContent: savedRecipeTitles.has(recipe.title) ? "Saved!" : "Make Recipe",
+      disabled: savedRecipeTitles.has(recipe.title),
     });
 
     saveBtn.addEventListener("click", async () => {
@@ -753,9 +794,10 @@ function renderRecipes(recipes) {
         await api("/api/saved-recipes", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(recipe.title)
+          body: JSON.stringify({ title: recipe.title, steps: recipe.steps })
         });
 
+        savedRecipeTitles.add(recipe.title);
         saveBtn.textContent = "Saved!";
         setStatus(`Saved "${recipe.title}".`);
       } catch (error) {
@@ -778,7 +820,88 @@ function renderRecipes(recipes) {
 }
 
 window.addEventListener("pagehide", stopCamera);
-startCamera();
+
+async function openRecommendedRecipes() {
+  const button = $("recommended-recipes-btn");
+  button.disabled = true;
+  const returnState = {
+    featurePage: !$("feature-page").hidden,
+    items,
+    diet: $("diet").value,
+    minutes: $("minutes").value,
+    staples: $("staples").checked,
+    shoppingMode: document.querySelector('input[name="shopping-mode"]:checked')?.value || "no",
+    minMissingItems: $("min-missing-items").value,
+    maxMissingItems: $("max-missing-items").value,
+    recipes: generatedRecipes,
+    savedRecipeTitles: [...savedRecipeTitles],
+  };
+  try {
+    sessionStorage.setItem("fridgechef-return-state", JSON.stringify(returnState));
+    await saveReturnPhotos(selectedFiles);
+    window.location.assign("/recommended_recipes.html");
+  } catch (error) {
+    if (!$("feature-page").hidden) {
+      setStatus(`Couldn’t preserve your photos for returning from Recipe History: ${error.message}`, true);
+    } else {
+      $("camera-message").textContent = `Couldn’t preserve your photos for returning from Recipe History: ${error.message}`;
+    }
+    button.disabled = false;
+  }
+}
+
+$("recommended-recipes-btn").addEventListener("click", openRecommendedRecipes);
+
+async function restorePreviousPage() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("return") !== "previous") {
+    startCamera();
+    return;
+  }
+
+  const savedState = sessionStorage.getItem("fridgechef-return-state");
+  sessionStorage.removeItem("fridgechef-return-state");
+  if (!savedState) {
+    startCamera();
+    return;
+  }
+
+  try {
+    const state = JSON.parse(savedState);
+    if (!state.featurePage) {
+      startCamera();
+      return;
+    }
+
+    items = Array.isArray(state.items) ? state.items : [];
+    $("diet").value = state.diet || "";
+    $("minutes").value = state.minutes || "45";
+    $("staples").checked = Boolean(state.staples);
+    $("min-missing-items").value = state.minMissingItems || "0";
+    $("max-missing-items").value = state.maxMissingItems || "3";
+    const shoppingMode = [...document.querySelectorAll('input[name="shopping-mode"]')]
+      .find((input) => input.value === state.shoppingMode);
+    if (shoppingMode) shoppingMode.checked = true;
+    $("shopping-range").hidden = state.shoppingMode !== "yes";
+    selectedFiles = await loadReturnPhotos();
+    savedRecipeTitles = new Set(
+      Array.isArray(state.savedRecipeTitles) ? state.savedRecipeTitles : []
+    );
+    showFeatures();
+    renderItems();
+    if (Array.isArray(state.recipes)) renderRecipes(state.recipes);
+    $("ingredients").hidden = false;
+    $("prefs").hidden = false;
+    $("specific-dish").hidden = false;
+    setStatus("Returned to your previous page.");
+  } catch (error) {
+    sessionStorage.removeItem("fridgechef-return-state");
+    $("camera-message").textContent = "Couldn’t restore your previous page. Starting the camera instead.";
+    startCamera();
+  }
+}
+
+restorePreviousPage();
 </script>
 </body>
 </html>
