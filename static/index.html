@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -79,6 +80,7 @@
     background: #fff; border: 1px solid var(--line); border-radius: 14px;
     padding: 20px; margin: 0 0 16px;
   }
+  h1 { font-size: 2.4rem; letter-spacing: -0.03em; margin: 0 0 6px; }
   h2 { font-size: 1.25rem; margin: 0 0 12px; }
   h3 { font-size: 1.1rem; margin: 0 0 4px; }
   label { display: block; font-weight: 600; margin-bottom: 6px; }
@@ -272,7 +274,9 @@ function setStatus(msg, isError = false) {
   status.className = isError ? "error" : "";
 }
 
-function busy(id, on) { $(id).disabled = on; }
+function busy(id, on) {
+  $(id).disabled = on;
+}
 
 async function api(path, options) {
   if (window.location.protocol === "file:") {
@@ -444,9 +448,69 @@ async function findIngredients(files) {
   setStatus("Looking through your photos…");
   const formData = new FormData();
   selectedFiles.forEach((file) => formData.append("files", file));
+// Save the current ingredient list, including quantities.
+async function saveIngredients() {
+  return api("/api/ingredients", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items })
+  });
+}
+
+function renderItems() {
+  const list = $("item-list");
+  list.replaceChildren();
+
+  console.log("Ingredients:", items);
+
+  items.forEach((it, i) => {
+    const label = it.quantity_estimate
+      ? `${it.name} (${it.quantity_estimate})`
+      : it.name;
+
+    const remove = el("button", { type: "button", textContent: "×" });
+    remove.setAttribute("aria-label", `Remove ${it.name}`);
+
+    remove.addEventListener("click", async () => {
+      items.splice(i, 1);
+      renderItems();
+
+      try {
+        await saveIngredients();
+        setStatus("Ingredient removed.");
+      } catch (e) {
+        setStatus(e.message, true);
+      }
+    });
+
+    const chip = el(
+      "li",
+      { className: "chip" + (it.confidence === "low" ? " low" : "") },
+      el("span", { textContent: label }),
+      remove
+    );
+
+    list.append(chip);
+  });
+
+  $("low-hint").hidden = !items.some((it) => it.confidence === "low");
+}
+
+// Detect ingredients and save them to Supabase.
+$("detect-btn").addEventListener("click", async () => {
+  const files = $("photos").files;
+  if (!files.length) return setStatus("Choose at least one photo first.", true);
+
+  const fd = new FormData();
+  [...files].slice(0, 4).forEach((f) => fd.append("files", f));
+
+  busy("detect-btn", true);
+  setStatus("Looking through your photos…");
+
   try {
     const data = await api("/api/detect", { method: "POST", body: formData });
     items = data.items;
+
     renderItems();
     if (items.length) {
       $("ingredients").hidden = false;
@@ -459,6 +523,17 @@ async function findIngredients(files) {
     }
   } catch (error) {
     setStatus(error.message, true);
+
+    $("ingredients").hidden = false;
+    $("prefs").hidden = false;
+
+    await saveIngredients();
+
+    setStatus(items.length
+      ? `Found and saved ${items.length} items. Fix anything that's wrong, then suggest recipes.`
+      : "No food found. Try a clearer photo or add items by hand.");
+  } catch (e) {
+    setStatus(e.message, true);
   } finally {
     busy("picker-detect-btn", false);
   }
@@ -495,19 +570,42 @@ function renderItems() {
 
 $("add-form").addEventListener("submit", (event) => {
   event.preventDefault();
+// Add an ingredient manually and save the updated list.
+$("add-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+
   const name = $("new-item").value.trim();
   if (!name) return;
+
   items.push({ name, quantity_estimate: "", confidence: "high" });
   $("new-item").value = "";
   renderItems();
+
+  try {
+    await saveIngredients();
+    setStatus(`${name} added and saved.`);
+  } catch (e) {
+    setStatus(e.message, true);
+  }
+
   $("new-item").focus();
 });
 
+// Generate recipes.
 $("recipes-btn").addEventListener("click", async () => {
   if (!items.length) return setStatus("Add at least one ingredient.", true);
+
   busy("recipes-btn", true);
   setStatus("Cooking up ideas…");
+
   try {
+    const body = {
+      items: items.map((i) => i.name),
+      diet: $("diet").value.trim(),
+      max_minutes: Number($("minutes").value) || 45,
+      assume_staples: $("staples").checked,
+    };
+
     const data = await api("/api/recipes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -518,6 +616,7 @@ $("recipes-btn").addEventListener("click", async () => {
         assume_staples: $("staples").checked,
       }),
     });
+
     renderRecipes(data.recipes);
     setStatus("");
   } catch (error) {
@@ -570,9 +669,20 @@ function renderRecipes(recipes) {
         className: "need", textContent: "Need to buy: " + recipe.missing.join(", "),
       }));
       recipe.missing.forEach((name) => shopping.set(name.toLowerCase(), name));
+
+  recipes.forEach((r) => {
+    const art = el("article", { className: "recipe" });
+    art.append(el("h3", { textContent: r.title }));
+    art.append(el("p", { className: "meta", textContent: `${r.minutes} minutes` }));
+    art.append(el("p", { textContent: "You have: " + (r.uses.join(", ") || "nothing listed") }));
+
+    if (r.missing.length) {
+      art.append(el("p", { className: "need", textContent: "Need to buy: " + r.missing.join(", ") }));
+      r.missing.forEach((m) => shopping.set(m.toLowerCase(), m));
     } else {
       article.append(el("p", { textContent: "Nothing to buy." }));
     }
+
     const steps = el("ol");
     recipe.steps.forEach((step) => steps.append(el("li", { textContent: step })));
     article.append(steps);
@@ -581,6 +691,7 @@ function renderRecipes(recipes) {
   const list = $("shopping-list");
   list.replaceChildren();
   shopping.forEach((name) => list.append(el("li", { textContent: name })));
+
   $("shopping").hidden = shopping.size === 0;
   $("results").hidden = false;
   $("results").scrollIntoView({ behavior: "smooth" });
