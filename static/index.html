@@ -1,42 +1,96 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>FridgeChef</title>
+<title>CookAI</title>
 <style>
   :root {
-    --bg: #eef3f2; --surface: #ffffff; --ink: #10241f; --muted: #586b66;
-    --line: #cfdad7; --accent: #1f7a5c; --accent-dark: #17604832; --warn: #b4400f;
+    color-scheme: light;
+    --ink: #10241f; --muted: #586b66; --line: #cfdad7;
+    --accent: #1f7a5c; --warn: #b4400f;
   }
   * { box-sizing: border-box; }
   body {
-    margin: 0; background: var(--bg); color: var(--ink);
+    margin: 0; background: #eef3f2; color: var(--ink);
     font: 16px/1.55 "Avenir Next", "Segoe UI", system-ui, sans-serif;
   }
-  main { max-width: 720px; margin: 0 auto; padding: 40px 20px 72px; }
-  h1 { font-size: 2.4rem; letter-spacing: -0.03em; margin: 0 0 6px; }
+  button {
+    font: inherit; font-weight: 650; padding: 10px 18px; border-radius: 999px;
+    cursor: pointer; border: 1px solid var(--accent); background: var(--accent); color: #fff;
+  }
+  button.secondary { background: #fff; color: var(--ink); border-color: #d7dfdc; }
+  button:disabled { opacity: .55; cursor: wait; }
+  :focus-visible { outline: 3px solid #78d6b3; outline-offset: 3px; }
+  [hidden] { display: none !important; }
+
+  #app-header {
+    position: fixed; z-index: 3; inset: 20px 24px auto;
+    display: flex; justify-content: space-between; align-items: center; gap: 16px;
+    color: #fff;
+  }
+  body.feature-mode #app-header { color: var(--ink); }
+  .brand { margin: 0; font-size: 1.35rem; letter-spacing: -.04em; }
+  .header-actions { display: flex; align-items: center; gap: 10px; }
+  .header-actions button { padding: 9px 15px; }
+  .camera-view {
+    position: fixed; inset: 0; overflow: hidden; background: #202b28; color: #fff;
+  }
+  #camera-video, #camera-placeholder {
+    position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  }
+  #camera-video { transform: scaleX(-1); }
+  #camera-placeholder {
+    display: grid; place-items: center; padding: 110px 24px;
+    color: #e0e9e5; text-align: center;
+  }
+  .camera-shade {
+    position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(180deg, #07120f9c 0%, transparent 28%, transparent 62%, #07120fc9 100%);
+  }
+  .camera-message {
+    position: absolute; inset: 38% 24px auto; z-index: 1; text-align: center;
+    color: #fff; text-shadow: 0 1px 12px #000;
+  }
+  .camera-message p { margin: 6px 0; }
+  .capture-area {
+    position: absolute; z-index: 1; inset: auto 0 30px;
+    display: grid; justify-items: center; gap: 8px; color: #fff;
+  }
+  .capture-button {
+    width: 76px; height: 76px; padding: 0; border: 4px solid #fff;
+    background: #ffffff3d; box-shadow: 0 2px 18px #0006;
+  }
+  .capture-button::after {
+    content: ""; display: block; width: 54px; height: 54px; margin: auto;
+    border-radius: 50%; background: #fff;
+  }
+  .capture-area p { margin: 0; font-size: .9rem; text-shadow: 0 1px 8px #000; }
+
+  main { max-width: 760px; margin: 0 auto; padding: 112px 20px 72px; }
+  .page-heading { margin: 0 0 22px; }
+  .page-heading h1 { margin: 0; font-size: 2rem; letter-spacing: -.04em; }
+  .page-heading p { color: var(--muted); margin: 4px 0 0; }
+  .selected-photos { display: flex; gap: 10px; overflow-x: auto; margin: 0 0 16px; }
+  .selected-photos img { width: 92px; height: 92px; object-fit: cover; border-radius: 12px; }
+  .find-row { margin: 0 0 20px; }
+  .find-row button { min-width: 190px; }
+  section.feature-card {
+    background: #fff; border: 1px solid var(--line); border-radius: 14px;
+    padding: 20px; margin: 0 0 16px;
+  }
   h2 { font-size: 1.25rem; margin: 0 0 12px; }
   h3 { font-size: 1.1rem; margin: 0 0 4px; }
-  .tagline { color: var(--muted); margin: 0 0 32px; font-size: 1.1rem; }
-  section { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; margin-bottom: 20px; }
   label { display: block; font-weight: 600; margin-bottom: 6px; }
   input[type="text"], input[type="number"], input[type="file"] {
-    width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px;
+    width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
     font: inherit; background: #fff; color: var(--ink);
   }
   .row { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
   .row > * { flex: 1 1 160px; }
   .row > button { flex: 0 0 auto; }
-  button {
-    font: inherit; font-weight: 600; padding: 10px 18px; border-radius: 6px; cursor: pointer;
-    border: 2px solid var(--accent); background: var(--accent); color: #fff;
-  }
-  button.secondary { background: #fff; color: var(--accent); }
-  button:disabled { opacity: 0.55; cursor: wait; }
-  :focus-visible { outline: 3px solid #0b57d0; outline-offset: 2px; }
-  #status { min-height: 1.6em; margin: 0 0 16px; color: var(--muted); }
+  #add-form .qty { flex: 0 1 150px; }
+  #status { min-height: 1.6em; margin: 0 0 12px; color: var(--muted); }
   #status.error { color: var(--warn); font-weight: 600; }
   ul.chips { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 0 0 16px; }
   .chip {
@@ -45,52 +99,90 @@
   }
   .chip.low { background: #fff; border-style: dashed; border-color: var(--muted); }
   .chip button {
-    padding: 0 8px; border-radius: 999px; border: none; background: transparent;
-    color: var(--ink); font-size: 1.2rem; line-height: 1.4;
+    padding: 0 8px; border: 0; background: transparent; color: var(--ink);
+    font-size: 1.2rem; line-height: 1.4;
   }
-  .hint { color: var(--muted); font-size: 0.9rem; margin: 8px 0 0; }
+  .hint { color: var(--muted); font-size: .9rem; margin: 8px 0 0; }
   .check { display: flex; gap: 8px; align-items: center; font-weight: 400; margin: 0; }
+
+  /* Shopping filter (from the filter version) */
   .shopping-mode { border: 0; padding: 0; margin: 16px 0 0; }
-
   .shopping-mode legend { font-weight: 600; margin-bottom: 8px; }
-
   .shopping-options { display: flex; flex-wrap: wrap; gap: 8px; }
-
-  .shopping-option { display: flex; align-items: center; gap: 8px; margin: 0; padding: 9px 12px; border: 1px solid var(--line); border-radius: 6px; font-weight: 400; }
-
+  .shopping-option {
+    display: flex; align-items: center; gap: 8px; margin: 0; padding: 9px 12px;
+    border: 1px solid var(--line); border-radius: 8px; font-weight: 400;
+  }
   .shopping-option input { margin: 0; accent-color: var(--accent); }
-
   .shopping-range { display: flex; align-items: end; gap: 10px; margin-top: 12px; }
-
   .shopping-range > div { flex: 1 1 120px; }
-
   .shopping-range input { max-width: 180px; }
+
   .recipe { border-top: 1px solid var(--line); padding: 16px 0; }
   .recipe:first-of-type { border-top: none; padding-top: 0; }
   .meta { color: var(--muted); margin: 0 0 8px; }
   .need { color: var(--warn); font-weight: 600; }
   ol, ul.plain { padding-left: 1.2rem; margin: 6px 0 0; }
   .shopping { background: #f6faf8; border-radius: 8px; padding: 14px 16px; margin-top: 8px; }
-  [hidden] { display: none !important; }
-  @media (prefers-reduced-motion: no-preference) { button { transition: opacity .15s; } }
+
+  dialog {
+    width: min(520px, calc(100% - 32px)); max-height: min(88vh, 760px); padding: 0;
+    border: 0; border-radius: 20px; color: var(--ink); box-shadow: 0 20px 80px #0005;
+  }
+  dialog::backdrop { background: #07120f99; backdrop-filter: blur(4px); }
+  .dialog-content { padding: 22px; }
+  .dialog-content h2 { margin-bottom: 4px; }
+  .dialog-content > p { color: var(--muted); margin: 0 0 16px; }
+  .review-image { display: block; width: 100%; max-height: 55vh; object-fit: contain; background: #18211e; border-radius: 12px; }
+  .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+  .photo-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+  .photo-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 9px; }
+  @media (max-width: 560px) {
+    #app-header { inset: 14px 14px auto; align-items: flex-start; }
+    .brand { font-size: 1.1rem; padding-top: 7px; }
+    .header-actions { gap: 6px; }
+    .header-actions button { font-size: .83rem; padding: 8px 10px; }
+    main { padding: 94px 14px 48px; }
+    .photo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (prefers-reduced-motion: no-preference) { button { transition: opacity .15s, background-color .15s; } }
 </style>
 </head>
 <body>
-<main>
-  <h1>FridgeChef</h1>
-  <p class="tagline">Photograph your fridge. Get dinner ideas and a shopping list.</p>
+<header id="app-header">
+  <p class="brand">CookAI</p>
+  <div class="header-actions">
+    <button class="secondary" type="button" data-open-picker>Choose photos</button>
+    <button id="recommended-recipes-btn" type="button">
+      Recipe History
+    </button>
+    <button class="secondary" type="button" data-logout>Sign out</button>
+  </div>
+</header>
 
+<section id="camera-screen" class="camera-view" aria-label="Camera preview">
+  <video id="camera-video" autoplay muted playsinline hidden></video>
+  <div id="camera-placeholder">Starting your camera…</div>
+  <div class="camera-shade"></div>
+  <div class="camera-message">
+    <p id="camera-message">Center your fridge or pantry in the frame.</p>
+  </div>
+  <div class="capture-area">
+    <button id="capture-btn" class="capture-button" type="button" aria-label="Capture photo" disabled></button>
+    <p>Tap to take a photo</p>
+  </div>
+</section>
+
+<main id="feature-page" hidden>
+  <div class="page-heading">
+    <h1>Let’s find your ingredients</h1>
+    <p>Review your photo, then identify what’s in your fridge or pantry.</p>
+  </div>
+  <div id="selected-photos" class="selected-photos" aria-label="Photos selected for ingredient search"></div>
   <p id="status" role="status" aria-live="polite"></p>
+  <p class="find-row"><button id="retake-feature-btn" class="secondary" type="button">Retake image</button></p>
 
-  <section id="upload">
-    <h2>Add photos</h2>
-    <label for="photos">Choose up to 4 photos of your fridge or pantry</label>
-    <input id="photos" type="file" accept="image/*" multiple>
-    <p class="hint">Shoot each shelf separately for better results.</p>
-    <p><button id="detect-btn" type="button">Find ingredients</button></p>
-  </section>
-
-  <section id="ingredients" hidden>
+  <section id="ingredients" class="feature-card" hidden>
     <h2>Your ingredients</h2>
     <ul id="item-list" class="chips" aria-label="Detected ingredients"></ul>
     <p class="hint" id="low-hint" hidden>Dashed items are low confidence. Remove any that are wrong.</p>
@@ -99,11 +191,15 @@
         <label for="new-item">Add something we missed</label>
         <input id="new-item" type="text" autocomplete="off">
       </div>
+      <div class="qty">
+        <label for="new-quantity">Quantity</label>
+        <input id="new-quantity" type="number" min="0" step="1" inputmode="numeric" value="1">
+      </div>
       <button class="secondary" type="submit">Add</button>
     </form>
   </section>
 
-  <section id="prefs" hidden>
+  <section id="prefs" class="feature-card" hidden>
     <h2>Preferences</h2>
     <div class="row">
       <div>
@@ -116,46 +212,38 @@
       </div>
     </div>
     <p><label class="check"><input id="staples" type="checkbox" checked> Assume salt, pepper, oil, and water</label></p>
+
     <fieldset class="shopping-mode">
-
       <legend>Shopping preference</legend>
-
       <div class="shopping-options">
-
         <label class="shopping-option"><input type="radio" name="shopping-mode" value="no" checked> Use only my ingredients</label>
-
         <label class="shopping-option"><input type="radio" name="shopping-mode" value="yes"> I’m willing to shop</label>
-
       </div>
-
       <div id="shopping-range" class="shopping-range" hidden>
-
         <div>
-
           <label for="min-missing-items">Buy at least</label>
-
-          <input id="min-missing-items" type="number" min="0" max="20" value="1">
-
+          <input id="min-missing-items" type="number" min="0" max="20" value="0">
         </div>
-
         <div>
-
           <label for="max-missing-items">No more than</label>
-
           <input id="max-missing-items" type="number" min="0" max="20" value="3">
-
         </div>
-
         <p class="hint">Shopping needs are shown separately for each recipe.</p>
-
       </div>
-
     </fieldset>
+
     <p><button id="recipes-btn" type="button">Suggest recipes</button></p>
     <p class="hint">Dietary filters are a best effort. If you have an allergy, check every ingredient yourself.</p>
   </section>
 
-  <section id="results" hidden>
+  <section id="specific-dish" class="feature-card" hidden>
+    <h2>Make a specific dish</h2>
+    <label for="dish-name">What dish would you like to make?</label>
+    <input id="dish-name" type="text" maxlength="120" placeholder="e.g. vegetable stir-fry">
+    <p><button id="specific-recipe-btn" type="button">Create recipe with my ingredients</button></p>
+  </section>
+
+  <section id="results" class="feature-card" hidden>
     <h2>Recipes</h2>
     <div id="recipe-list"></div>
     <div class="shopping" id="shopping" hidden>
@@ -165,9 +253,90 @@
   </section>
 </main>
 
+<dialog id="review-dialog" aria-labelledby="review-title">
+  <div class="dialog-content">
+    <h2 id="review-title">Find ingredients</h2>
+    <p>We’ll look for ingredients in this photo.</p>
+    <img id="review-image" class="review-image" alt="Photo captured with your camera">
+    <div class="dialog-actions">
+      <button id="retake-btn" class="secondary" type="button">Retake</button>
+      <button id="review-detect-btn" type="button">Find ingredients</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="no-ingredients-dialog" aria-labelledby="no-ingredients-title">
+  <div class="dialog-content">
+    <h2 id="no-ingredients-title">No ingredients found</h2>
+    <p>We couldn’t identify any ingredients in that image. Try retaking the photo or uploading a clearer image.</p>
+    <div class="dialog-actions">
+      <button id="no-ingredients-retake-btn" class="secondary" type="button">Retake photo</button>
+      <button id="no-ingredients-upload-btn" type="button">Upload image</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="picker-dialog" aria-labelledby="picker-title">
+  <div class="dialog-content">
+    <h2 id="picker-title">Choose photos</h2>
+    <p>Select up to 4 images of your fridge or pantry.</p>
+    <label for="photos">Photos</label>
+    <input id="photos" type="file" accept="image/*" multiple>
+    <p id="picker-count" class="hint">No photos selected.</p>
+    <div id="picker-preview" class="photo-grid"></div>
+    <div class="dialog-actions">
+      <button id="cancel-picker-btn" class="secondary" type="button">Cancel</button>
+      <button id="picker-detect-btn" type="button" disabled>Find ingredients</button>
+    </div>
+  </div>
+</dialog>
+
 <script>
 const $ = (id) => document.getElementById(id);
 let items = [];
+let generatedRecipes = null;
+let savedRecipeTitles = new Set();
+let cameraStream = null;
+let capturedFile = null;
+let selectedFiles = [];
+let pickerFiles = [];
+let capturedUrl = "";
+let pickerUrls = [];
+
+function openReturnPhotoStore() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open("fridgechef-navigation", 1);
+    request.onupgradeneeded = () => {
+      request.result.createObjectStore("state");
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function saveReturnPhotos(files) {
+  const database = await openReturnPhotoStore();
+  await new Promise((resolve, reject) => {
+    const transaction = database.transaction("state", "readwrite");
+    transaction.objectStore("state").put(files, "selected-photos");
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error);
+  });
+  database.close();
+}
+
+async function loadReturnPhotos() {
+  const database = await openReturnPhotoStore();
+  const files = await new Promise((resolve, reject) => {
+    const transaction = database.transaction("state", "readonly");
+    const request = transaction.objectStore("state").get("selected-photos");
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  });
+  database.close();
+  return files;
+}
 
 function el(tag, props = {}, ...kids) {
   const n = document.createElement(tag);
@@ -177,28 +346,55 @@ function el(tag, props = {}, ...kids) {
 }
 
 function setStatus(msg, isError = false) {
-  const s = $("status");
-  s.textContent = msg;
-  s.className = isError ? "error" : "";
+  const status = $("status");
+  status.textContent = msg;
+  status.className = isError ? "error" : "";
 }
 
 function busy(id, on) {
   $(id).disabled = on;
 }
 
+// Turn FastAPI/Supabase error shapes into readable text (avoids "[object Object]").
+function errorText(detail) {
+  if (!detail) return "Something went wrong. Try again.";
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail.map((d) => `${(d.loc || []).slice(1).join(".")}: ${d.msg}`).join("; ");
+  }
+  if (detail.message) return detail.message;
+  return JSON.stringify(detail);
+}
+
+// The database column is an integer: always send a whole number or null.
+function toIntOrNull(v) {
+  if (v === null || v === undefined || v === "") return null;
+  if (typeof v === "number") return Number.isFinite(v) && v >= 0 ? Math.round(v) : null;
+  const m = String(v).match(/\d+/); // "about 6" -> 6, "half a carton" -> null
+  return m ? parseInt(m[0], 10) : null;
+}
+
+// Merged: andy's file:// guard + main's default `options = {}`
 async function api(path, options = {}) {
+  if (window.location.protocol === "file:") {
+    throw new Error("Open CookAI through its web server to use ingredient detection.");
+  }
   const res = await fetch(path, options);
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.detail || "Something went wrong. Try again.");
+  if (!res.ok) throw new Error(errorText(data.detail));
   return data;
 }
+
+// ---- Ingredient logic (from main) ----
 
 // Save the current ingredient list, including quantities.
 async function saveIngredients() {
   return api("/api/ingredients", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ items })
+    body: JSON.stringify({
+      items: items.map((it) => ({ ...it, quantity_estimate: toIntOrNull(it.quantity_estimate) })),
+    }),
   });
 }
 
@@ -209,9 +405,8 @@ function renderItems() {
   console.log("Ingredients:", items);
 
   items.forEach((it, i) => {
-    const label = it.quantity_estimate
-      ? `${it.name} (${it.quantity_estimate})`
-      : it.name;
+    const hasQty = it.quantity_estimate !== null && it.quantity_estimate !== undefined && it.quantity_estimate !== "";
+    const label = hasQty ? `${it.name} (${it.quantity_estimate})` : it.name;
 
     const remove = el("button", { type: "button", textContent: "×" });
     remove.setAttribute("aria-label", `Remove ${it.name}`);
@@ -241,121 +436,291 @@ function renderItems() {
   $("low-hint").hidden = !items.some((it) => it.confidence === "low");
 }
 
-// Detect ingredients and save them to Supabase.
-$("detect-btn").addEventListener("click", async () => {
-  const files = $("photos").files;
-  if (!files.length) return setStatus("Choose at least one photo first.", true);
+// ---- Camera and navigation (from andy) ----
 
-  const fd = new FormData();
-  [...files].slice(0, 4).forEach((f) => fd.append("files", f));
-
-  busy("detect-btn", true);
-  setStatus("Looking through your photos…");
-
+async function startCamera() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    $("camera-placeholder").textContent = "Camera preview isn’t available here. Choose photos to continue.";
+    $("camera-message").textContent = "Allow camera access, or choose photos from your device.";
+    return;
+  }
   try {
-    const data = await api("/api/detect", { method: "POST", body: fd });
-    items = data.items;
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: "environment" } },
+    });
+    $("camera-video").srcObject = cameraStream;
+    $("camera-video").hidden = false;
+    $("camera-placeholder").hidden = true;
+    $("capture-btn").disabled = false;
+  } catch (error) {
+    $("camera-placeholder").textContent = "Camera access is unavailable. Choose photos to continue.";
+    $("camera-message").textContent = "Allow camera access in your browser settings, or choose photos.";
+  }
+}
 
-    renderItems();
+function stopCamera() {
+  cameraStream?.getTracks().forEach((track) => track.stop());
+  cameraStream = null;
+  $("camera-video").srcObject = null;
+}
 
-    $("ingredients").hidden = false;
-    $("prefs").hidden = false;
+function showFeatures() {
+  stopCamera();
+  document.body.classList.add("feature-mode");
+  $("camera-screen").hidden = true;
+  $("feature-page").hidden = false;
+  renderSelectedPhotos();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
 
-    await saveIngredients();
+function returnToCamera() {
+  $("no-ingredients-dialog").close();
+  $("feature-page").hidden = true;
+  document.body.classList.remove("feature-mode");
+  $("camera-screen").hidden = false;
+  $("camera-video").hidden = true;
+  $("camera-placeholder").hidden = false;
+  $("camera-placeholder").textContent = "Starting your camera…";
+  $("camera-message").textContent = "Center your fridge or pantry in the frame.";
+  startCamera();
+}
 
-    setStatus(items.length
-      ? `Found and saved ${items.length} items. Fix anything that's wrong, then suggest recipes.`
-      : "No food found. Try a clearer photo or add items by hand.");
-  } catch (e) {
-    setStatus(e.message, true);
-  } finally {
-    busy("detect-btn", false);
+function renderSelectedPhotos() {
+  const gallery = $("selected-photos");
+  gallery.replaceChildren();
+  selectedFiles.forEach((file) => {
+    const url = URL.createObjectURL(file);
+    const image = el("img", { src: url, alt: "Selected fridge or pantry photo" });
+    image.addEventListener("load", () => URL.revokeObjectURL(url), { once: true });
+    gallery.append(image);
+  });
+}
+
+const logoutButton = document.querySelector("[data-logout]");
+logoutButton.addEventListener("click", async () => {
+  const button = logoutButton;
+  button.disabled = true;
+  try {
+    await api("/api/logout", { method: "POST" });
+    window.location.assign("/login");
+  } catch (error) {
+    if (!$("feature-page").hidden) setStatus(error.message, true);
+    else $("camera-message").textContent = error.message;
+    button.disabled = false;
   }
 });
 
-// Add an ingredient manually and save the updated list.
+function openPicker() {
+  pickerFiles = [];
+  $("photos").value = "";
+  clearPickerPreview();
+  $("picker-count").textContent = "No photos selected.";
+  $("picker-detect-btn").disabled = true;
+  $("picker-dialog").showModal();
+}
+
+function clearPickerPreview() {
+  pickerUrls.forEach((url) => URL.revokeObjectURL(url));
+  pickerUrls = [];
+  $("picker-preview").replaceChildren();
+}
+
+document.querySelectorAll("[data-open-picker]").forEach((button) => {
+  button.addEventListener("click", openPicker);
+});
+
+$("photos").addEventListener("change", () => {
+  clearPickerPreview();
+  pickerFiles = [...$("photos").files];
+  const tooMany = pickerFiles.length > 4;
+  $("picker-count").textContent = tooMany
+    ? `You selected ${pickerFiles.length} photos. Choose no more than 4.`
+    : `${pickerFiles.length} photo${pickerFiles.length === 1 ? "" : "s"} selected.`;
+  $("picker-detect-btn").disabled = tooMany || pickerFiles.length === 0;
+  pickerFiles.slice(0, 4).forEach((file) => {
+    const url = URL.createObjectURL(file);
+    pickerUrls.push(url);
+    $("picker-preview").append(el("img", { src: url, alt: "Selected photo preview" }));
+  });
+});
+
+$("cancel-picker-btn").addEventListener("click", () => $("picker-dialog").close());
+
+$("capture-btn").addEventListener("click", () => {
+  const video = $("camera-video");
+  if (!video.videoWidth || !video.videoHeight) {
+    $("camera-message").textContent = "The camera is still starting. Try again in a moment.";
+    return;
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext("2d").drawImage(video, 0, 0);
+  canvas.toBlob((blob) => {
+    if (!blob) {
+      $("camera-message").textContent = "Couldn’t capture that photo. Please try again.";
+      return;
+    }
+    capturedFile = new File([blob], "fridge-capture.jpg", { type: "image/jpeg" });
+    if (capturedUrl) URL.revokeObjectURL(capturedUrl);
+    capturedUrl = URL.createObjectURL(blob);
+    $("review-image").src = capturedUrl;
+    $("review-dialog").showModal();
+  }, "image/jpeg", 0.92);
+});
+
+$("retake-btn").addEventListener("click", () => {
+  $("review-dialog").close();
+  capturedFile = null;
+});
+
+$("review-detect-btn").addEventListener("click", () => {
+  if (!capturedFile) return;
+  selectedFiles = [capturedFile];
+  $("review-dialog").close();
+  findIngredients(selectedFiles);
+});
+
+// Detect ingredients (andy's camera flow) and save them (main's logic).
+async function findIngredients(files) {
+  if (!files.length) {
+    setStatus("Choose at least one photo first.", true);
+    return;
+  }
+  selectedFiles = files.slice(0, 4);
+  showFeatures();
+  $("ingredients").hidden = true;
+  $("prefs").hidden = true;
+  $("specific-dish").hidden = true;
+  $("results").hidden = true;
+  items = [];
+  busy("picker-detect-btn", true);
+  setStatus("Looking through your photos…");
+  const formData = new FormData();
+  selectedFiles.forEach((file) => formData.append("files", file));
+  try {
+    const data = await api("/api/detect", { method: "POST", body: formData });
+    items = data.items.map((it) => ({ ...it, quantity_estimate: toIntOrNull(it.quantity_estimate) }));
+
+    renderItems();
+
+    if (items.length) {
+      $("ingredients").hidden = false;
+      $("prefs").hidden = false;
+      $("specific-dish").hidden = false;
+    }
+
+    // main: always persist the detected list
+    await saveIngredients();
+
+    if (items.length) {
+      setStatus(`Found and saved ${items.length} items. Fix anything that's wrong, then suggest recipes.`);
+    } else {
+      setStatus("No ingredients found.");
+      $("no-ingredients-dialog").showModal();
+    }
+  } catch (error) {
+    setStatus(error.message, true);
+  } finally {
+    busy("picker-detect-btn", false);
+  }
+}
+
+$("no-ingredients-retake-btn").addEventListener("click", returnToCamera);
+$("no-ingredients-upload-btn").addEventListener("click", () => {
+  $("no-ingredients-dialog").close();
+  openPicker();
+});
+
+$("retake-feature-btn").addEventListener("click", returnToCamera);
+$("picker-detect-btn").addEventListener("click", async () => {
+  if (!pickerFiles.length || pickerFiles.length > 4) return;
+  selectedFiles = [...pickerFiles];
+  $("picker-dialog").close();
+  await findIngredients(selectedFiles);
+});
+
+// Add an ingredient manually and save the updated list (main).
 $("add-form").addEventListener("submit", async (e) => {
   e.preventDefault();
 
   const name = $("new-item").value.trim();
+  const qtyRaw = $("new-quantity").value.trim();
   if (!name) return;
 
-  items.push({ name, quantity_estimate: "", confidence: "high" });
+  if (qtyRaw !== "" && !/^\d+$/.test(qtyRaw)) {
+    return setStatus("Quantity must be a whole number, like 2.", true);
+  }
+
+  items.push({ name, quantity_estimate: toIntOrNull(qtyRaw) ?? 1, confidence: "high" });
   $("new-item").value = "";
+  $("new-quantity").value = "1";
   renderItems();
 
   try {
     await saveIngredients();
     setStatus(`${name} added and saved.`);
-  } catch (e) {
-    setStatus(e.message, true);
+  } catch (err) {
+    items.pop(); // roll back so the screen matches the database
+    renderItems();
+    setStatus(err.message, true);
   }
 
   $("new-item").focus();
 });
 
-// Generate recipes.
+// Generate recipes (now with the shopping filter).
 $("recipes-btn").addEventListener("click", async () => {
   if (!items.length) return setStatus("Add at least one ingredient.", true);
-  const allowShopping = document.querySelector('input[name="shopping-mode"]:checked').value === "yes";
 
+  const allowShopping =
+    document.querySelector('input[name="shopping-mode"]:checked').value === "yes";
   const minMissingItems = Number($("min-missing-items").value);
-
   const maxMissingItems = Number($("max-missing-items").value);
 
   if (allowShopping && (
-
     !Number.isInteger(minMissingItems) || !Number.isInteger(maxMissingItems) ||
-
     minMissingItems < 0 || maxMissingItems > 20 || minMissingItems > maxMissingItems
-
   )) {
-
     return setStatus("Choose a shopping range from 0 to 20, with the minimum no greater than the maximum.", true);
-
   }
 
   busy("recipes-btn", true);
   setStatus("Cooking up ideas…");
 
   try {
-    const body = {
-
-      items: items.map((i) => i.name),
-
-      diet: $("diet").value.trim(),
-
-      max_minutes: Number($("minutes").value) || 45,
-
-      assume_staples: $("staples").checked,
-
-      allow_shopping: allowShopping,
-
-      min_missing_items: minMissingItems,
-
-      max_missing_items: maxMissingItems,
-
-    };
     const data = await api("/api/recipes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        items: items.map((item) => item.name),
+        diet: $("diet").value.trim(),
+        max_minutes: Number($("minutes").value) || 45,
+        assume_staples: $("staples").checked,
+        allow_shopping: allowShopping,
+        min_missing_items: minMissingItems,
+        max_missing_items: maxMissingItems,
+      }),
     });
 
+    savedRecipeTitles.clear();
     renderRecipes(data.recipes);
     setStatus("");
-  } catch (e) {
-    setStatus(e.message, true);
+  } catch (error) {
+    setStatus(error.message, true);
   } finally {
     busy("recipes-btn", false);
   }
 });
 
+// Show the range inputs only when the user is willing to shop.
 document.querySelectorAll('input[name="shopping-mode"]').forEach((input) => {
   input.addEventListener("change", () => {
     $("shopping-range").hidden = input.value !== "yes";
   });
 });
+
 $("specific-recipe-btn").addEventListener("click", async () => {
   const dish = $("dish-name").value.trim();
   if (!dish) return setStatus("Enter the dish you'd like to make.", true);
@@ -374,6 +739,7 @@ $("specific-recipe-btn").addEventListener("click", async () => {
         assume_staples: $("staples").checked,
       }),
     });
+    savedRecipeTitles.clear();
     renderRecipes([data.recipe]);
     setStatus("");
   } catch (error) {
@@ -384,41 +750,158 @@ $("specific-recipe-btn").addEventListener("click", async () => {
 });
 
 function renderRecipes(recipes) {
+  generatedRecipes = recipes;
   const box = $("recipe-list");
   box.replaceChildren();
   const shopping = new Map();
+
   if (!recipes.length) {
     box.append(el("p", { textContent: "No recipes matched those ingredients and shopping preferences. Try a wider shopping range." }));
   }
 
-  recipes.forEach((r) => {
-    const art = el("article", { className: "recipe" });
-    art.append(el("h3", { textContent: r.title }));
-    art.append(el("p", { className: "meta", textContent: `${r.minutes} minutes` }));
-    art.append(el("p", { textContent: "You have: " + (r.uses.join(", ") || "nothing listed") }));
-
-    if (r.missing.length) {
-      art.append(el("p", {
-        className: "need",
-        textContent: "Need to buy: " + r.missing.join(", "),
+  recipes.forEach((recipe) => {
+    const article = el("article", { className: "recipe" });
+    article.append(el("h3", { textContent: recipe.title }));
+    article.append(el("p", { className: "meta", textContent: `${recipe.minutes} minutes` }));
+    article.append(el("p", {
+      textContent: "You have: " + (recipe.uses.join(", ") || "nothing listed"),
+    }));
+    if (recipe.missing.length) {
+      article.append(el("p", {
+        className: "need", textContent: "Need to buy: " + recipe.missing.join(", "),
       }));
-      r.missing.forEach((name) => shopping.set(name.toLowerCase(), name));
+      recipe.missing.forEach((name) => shopping.set(name.toLowerCase(), name));
     } else {
-      art.append(el("p", { textContent: "Nothing to buy for this recipe." }));
+      article.append(el("p", { textContent: "Nothing to buy for this recipe." }));
     }
 
     const steps = el("ol");
-    r.steps.forEach((s) => steps.append(el("li", { textContent: s })));
-    art.append(steps);
-    box.append(art);
+    recipe.steps.forEach((step) => steps.append(el("li", { textContent: step })));
+    article.append(steps);
+
+    // Save recipe using the logged-in user's session.
+    const saveBtn = el("button", {
+      type: "button",
+      textContent: savedRecipeTitles.has(recipe.title) ? "Saved!" : "Make Recipe",
+      disabled: savedRecipeTitles.has(recipe.title),
+    });
+
+    saveBtn.addEventListener("click", async () => {
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Saving...";
+
+      try {
+        await api("/api/saved-recipes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: recipe.title, steps: recipe.steps })
+        });
+
+        savedRecipeTitles.add(recipe.title);
+        saveBtn.textContent = "Saved!";
+        setStatus(`Saved "${recipe.title}".`);
+      } catch (error) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Save Recipe";
+        setStatus(error.message, true);
+      }
+    });
+
+    article.append(saveBtn);
+    box.append(article);
   });
   const list = $("shopping-list");
   list.replaceChildren();
   shopping.forEach((name) => list.append(el("li", { textContent: name })));
 
+  $("shopping").hidden = shopping.size === 0;
   $("results").hidden = false;
   $("results").scrollIntoView({ behavior: "smooth" });
 }
+
+window.addEventListener("pagehide", stopCamera);
+
+async function openRecommendedRecipes() {
+  const button = $("recommended-recipes-btn");
+  button.disabled = true;
+  const returnState = {
+    featurePage: !$("feature-page").hidden,
+    items,
+    diet: $("diet").value,
+    minutes: $("minutes").value,
+    staples: $("staples").checked,
+    shoppingMode: document.querySelector('input[name="shopping-mode"]:checked')?.value || "no",
+    minMissingItems: $("min-missing-items").value,
+    maxMissingItems: $("max-missing-items").value,
+    recipes: generatedRecipes,
+    savedRecipeTitles: [...savedRecipeTitles],
+  };
+  try {
+    sessionStorage.setItem("fridgechef-return-state", JSON.stringify(returnState));
+    await saveReturnPhotos(selectedFiles);
+    window.location.assign("/recommended_recipes.html");
+  } catch (error) {
+    if (!$("feature-page").hidden) {
+      setStatus(`Couldn’t preserve your photos for returning from Recipe History: ${error.message}`, true);
+    } else {
+      $("camera-message").textContent = `Couldn’t preserve your photos for returning from Recipe History: ${error.message}`;
+    }
+    button.disabled = false;
+  }
+}
+
+$("recommended-recipes-btn").addEventListener("click", openRecommendedRecipes);
+
+async function restorePreviousPage() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("return") !== "previous") {
+    startCamera();
+    return;
+  }
+
+  const savedState = sessionStorage.getItem("fridgechef-return-state");
+  sessionStorage.removeItem("fridgechef-return-state");
+  if (!savedState) {
+    startCamera();
+    return;
+  }
+
+  try {
+    const state = JSON.parse(savedState);
+    if (!state.featurePage) {
+      startCamera();
+      return;
+    }
+
+    items = Array.isArray(state.items) ? state.items : [];
+    $("diet").value = state.diet || "";
+    $("minutes").value = state.minutes || "45";
+    $("staples").checked = Boolean(state.staples);
+    $("min-missing-items").value = state.minMissingItems || "0";
+    $("max-missing-items").value = state.maxMissingItems || "3";
+    const shoppingMode = [...document.querySelectorAll('input[name="shopping-mode"]')]
+      .find((input) => input.value === state.shoppingMode);
+    if (shoppingMode) shoppingMode.checked = true;
+    $("shopping-range").hidden = state.shoppingMode !== "yes";
+    selectedFiles = await loadReturnPhotos();
+    savedRecipeTitles = new Set(
+      Array.isArray(state.savedRecipeTitles) ? state.savedRecipeTitles : []
+    );
+    showFeatures();
+    renderItems();
+    if (Array.isArray(state.recipes)) renderRecipes(state.recipes);
+    $("ingredients").hidden = false;
+    $("prefs").hidden = false;
+    $("specific-dish").hidden = false;
+    setStatus("Returned to your previous page.");
+  } catch (error) {
+    sessionStorage.removeItem("fridgechef-return-state");
+    $("camera-message").textContent = "Couldn’t restore your previous page. Starting the camera instead.";
+    startCamera();
+  }
+}
+
+restorePreviousPage();
 </script>
 </body>
 </html>

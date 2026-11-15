@@ -1,15 +1,16 @@
-
 import os
 import secrets
 from pathlib import Path
 
+from auth import current_user, logged_in_user, router as auth_router
+from autorecipe import router as autorecipe_router
 from auth import COOKIE, SESSIONS, current_user, logged_in_user, router as auth_router
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile, Body
 from fastapi.responses import FileResponse, RedirectResponse
 from google import genai
 from google.genai import types
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from supabase import create_client, Client
 
 # ---------- Configuration ----------
@@ -18,17 +19,20 @@ client = genai.Client()
 sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_KEY"])
 MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 INDEX = Path(__file__).parent / "static" / "index.html"
+RECOMMENDED_RECIPES = Path(__file__).parent / "static" / "recommended_recipes.html"
+
 MAX_PHOTOS = 4
 MAX_BYTES = 30 * 1024 * 1024
 
-app = FastAPI(title="FridgeChef")
+app = FastAPI(title="CookAI")
 app.include_router(auth_router)
+app.include_router(autorecipe_router)
 
 
 # ---------- Schemas ----------
 class Ingredient(BaseModel):
     name: str
-    quantity_estimate: str
+    quantity_estimate: int | None = None  # whole number, or null if unknown
     confidence: str
 
 
@@ -62,6 +66,11 @@ class RecipeRequest(BaseModel):
 class AccountRequest(BaseModel):
     name: str
     password: str
+
+
+class SavedRecipeRequest(BaseModel):
+    title: str
+    steps: list[str] = Field(default_factory=list)
 
 
 # ---------- Gemini helper ----------
@@ -104,13 +113,50 @@ def get_user_id(username: str):
     return users[0]["user_id"]
 
 
+def clean_quantity(value: int | None) -> int | None:
+    """Whole number >= 0, or None if unknown or invalid."""
+    if value is None or value < 0:
+        return None
+    return value
+
+
+def replace_user_ingredients(user_id: int, items: list[Ingredient]) -> int:
+    rows = [
+        {
+            "user_id": user_id,
+            "ingredient": item.name.strip(),
+            "quantity_estimate": clean_quantity(item.quantity_estimate),
+        }
+        for item in items
+        if item.name.strip()
+    ]
+
+    db(sb.table("ingredients").delete().eq("user_id", user_id))
+    remaining = db(
+        sb.table("ingredients")
+        .select("id")
+        .eq("user_id", user_id)
+    )
+    if remaining:
+        raise HTTPException(
+            502,
+            "Could not remove the previous ingredient list. No new ingredients were added.",
+        )
+
+    if rows:
+        db(sb.table("ingredients").insert(rows))
+    return len(rows)
+
+
 # ---------- Routes ----------
 @app.get("/")
 def home(request: Request):
     if not logged_in_user(request):
         return RedirectResponse("/login", status_code=303)
     return FileResponse(INDEX)
-
+@app.get("/recommended_recipes.html")
+def recommended_recipes_page():
+    return FileResponse(RECOMMENDED_RECIPES)
 
 @app.post("/api/detect")
 async def detect(
@@ -132,11 +178,14 @@ async def detect(
 
     parts.append(
         "List every identifiable food item in these photos. "
-        "Give a rough quantity ONLY as an integer value and mark confidence honestly "
-        "(high, medium, or low). Do not list items you cannot see."
+        "Give quantity_estimate as a whole-number count (for example 6 eggs), "
+        "or null if the item can't be counted. "
+        "Mark confidence honestly (high, medium, or low). "
+        "Do not list items you cannot see."
     )
 
     pantry = ask_gemini(parts, Pantry)
+    replace_user_ingredients(get_user_id(username), pantry.items)
     return pantry.model_dump()
 
 
@@ -229,29 +278,65 @@ def add_ingredients(
     username: str = Depends(current_user),
 ):
     user_id = get_user_id(username)
-
-    rows = [
-        {
-            "user_id": user_id,
-            "ingredient": item.name.strip(),
-            "quantity_estimate": item.quantity_estimate.strip(),
-        }
-        for item in req.items
-        if item.name.strip()
-    ]
-
-    if rows:
-        db(sb.table("ingredients").insert(rows))
-
-    return {"added": len(rows)}
+    return {"added": replace_user_ingredients(user_id, req.items)}
 
 
 # ---------- Saved recipes ----------
 @app.get("/api/saved-recipes")
-def get_saved_recipes(user_id: int):
-    return {"recipes": db(sb.table("recipes").select("*").eq("user_id", user_id))}
-
+def get_saved_recipes(username: str = Depends(current_user)):
+    user_id = get_user_id(username)
+    return {"recipes": db(
+        sb.table("recipes").select("*").eq("user_id", user_id)
+    )}
 
 @app.post("/api/saved-recipes")
-def add_saved_recipe(user_id: int = Body(...), recipe: str = Body(...)):
-    return db(sb.table("recipes").insert({"user_id": user_id, "recipe": recipe}))[0]
+def add_saved_recipe(
+    req: SavedRecipeRequest,
+    username: str = Depends(current_user),
+):
+    user_id = get_user_id(username)
+
+    existing = db(
+        sb.table("recipes")
+        .select("*")
+        .eq("user_id", user_id)
+        .eq("recipe", req.title)
+    )
+
+    if existing:
+        saved = existing[0]
+        return db(
+            sb.table("recipes")
+            .update({
+                "quantity": (saved["quantity"] or 0) + 1,
+                "steps": req.steps,
+            })
+            .eq("id", saved["id"])
+        )[0]
+
+    return db(
+        sb.table("recipes").insert({
+            "user_id": user_id,
+            "recipe": req.title,
+            "quantity": 1,
+            "steps": req.steps,
+        })
+    )[0]
+
+
+@app.delete("/api/saved-recipes/{recipe_id}")
+def delete_saved_recipe(
+    recipe_id: int,
+    username: str = Depends(current_user),
+):
+    user_id = get_user_id(username)
+    deleted = db(
+        sb.table("recipes")
+        .delete()
+        .eq("id", recipe_id)
+        .eq("user_id", user_id)
+        .select("id")
+    )
+    if not deleted:
+        raise HTTPException(404, "Recipe not found.")
+    return {"deleted": True}
