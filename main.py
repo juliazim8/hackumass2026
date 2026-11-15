@@ -20,6 +20,8 @@ client = genai.Client()
 sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_KEY"])
 MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 INDEX = Path(__file__).parent / "static" / "index.html"
+RECOMMENDED_RECIPES = Path(__file__).parent / "static" / "recommended_recipes.html"
+
 MAX_PHOTOS = 4
 MAX_BYTES = 30 * 1024 * 1024
 
@@ -145,7 +147,9 @@ def home(request: Request):
     if not logged_in_user(request):
         return RedirectResponse("/login", status_code=303)
     return FileResponse(INDEX)
-
+@app.get("/recommended_recipes.html")
+def recommended_recipes_page():
+    return FileResponse(RECOMMENDED_RECIPES)
 
 @app.post("/api/detect")
 async def detect(
@@ -270,10 +274,35 @@ def add_ingredients(
 
 # ---------- Saved recipes ----------
 @app.get("/api/saved-recipes")
-def get_saved_recipes(user_id: int):
-    return {"recipes": db(sb.table("recipes").select("*").eq("user_id", user_id))}
-
+def get_saved_recipes(username: str = Depends(current_user)):
+    user_id = get_user_id(username)
+    return {"recipes": db(
+        sb.table("recipes").select("*").eq("user_id", user_id)
+    )}
 
 @app.post("/api/saved-recipes")
-def add_saved_recipe(user_id: int = Body(...), recipe: str = Body(...)):
-    return db(sb.table("recipes").insert({"user_id": user_id, "recipe": recipe}))[0]
+def add_saved_recipe(recipe: str = Body(...), username: str = Depends(current_user)):
+    user_id = get_user_id(username)
+
+    existing = db(
+        sb.table("recipes")
+        .select("*")
+        .eq("user_id", user_id)
+        .eq("recipe", recipe)
+    )
+
+    if existing:
+        saved = existing[0]
+        return db(
+            sb.table("recipes")
+            .update({"quantity": (saved["quantity"] or 0) + 1})
+            .eq("id", saved["id"])
+        )[0]
+
+    return db(
+        sb.table("recipes").insert({
+            "user_id": user_id,
+            "recipe": recipe,
+            "quantity": 1
+        })
+    )[0]
