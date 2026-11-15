@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -152,6 +153,9 @@
   <p class="brand">FridgeChef</p>
   <div class="header-actions">
     <button class="secondary" type="button" data-open-picker>Choose photos</button>
+    <button onclick="window.location.href='recommended_recipes.html'">
+      Recommended Recipes
+    </button>
     <button class="secondary" type="button" data-logout>Sign out</button>
   </div>
 </header>
@@ -310,7 +314,6 @@ function busy(id, on) {
   $(id).disabled = on;
 }
 
-// Merged: andy's file:// guard + main's default `options = {}`
 async function api(path, options = {}) {
   if (window.location.protocol === "file:") {
     throw new Error("Open FridgeChef through its web server to use ingredient detection.");
@@ -321,9 +324,8 @@ async function api(path, options = {}) {
   return data;
 }
 
-// ---- Ingredient logic (from main) ----
+// ---- Ingredient logic ----
 
-// Save the current ingredient list, including quantities.
 async function saveIngredients() {
   return api("/api/ingredients", {
     method: "POST",
@@ -371,7 +373,7 @@ function renderItems() {
   $("low-hint").hidden = !items.some((it) => it.confidence === "low");
 }
 
-// ---- Camera and navigation (from andy) ----
+// ---- Camera and navigation ----
 
 async function startCamera() {
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -517,7 +519,6 @@ $("review-detect-btn").addEventListener("click", () => {
   findIngredients(selectedFiles);
 });
 
-// Detect ingredients (andy's camera flow) and save them (main's logic).
 async function findIngredients(files) {
   if (!files.length) {
     setStatus("Choose at least one photo first.", true);
@@ -546,7 +547,6 @@ async function findIngredients(files) {
       $("specific-dish").hidden = false;
     }
 
-    // main: always persist the detected list
     await saveIngredients();
 
     if (items.length) {
@@ -576,7 +576,6 @@ $("picker-detect-btn").addEventListener("click", async () => {
   await findIngredients(selectedFiles);
 });
 
-// Add an ingredient manually and save the updated list (main).
 $("add-form").addEventListener("submit", async (e) => {
   e.preventDefault();
 
@@ -690,6 +689,7 @@ function renderRecipes(recipes) {
     article.append(el("p", {
       textContent: "You have: " + (recipe.uses.join(", ") || "nothing listed"),
     }));
+
     if (recipe.missing.length) {
       article.append(el("p", {
         className: "need", textContent: "Need to buy: " + recipe.missing.join(", "),
@@ -702,8 +702,37 @@ function renderRecipes(recipes) {
     const steps = el("ol");
     recipe.steps.forEach((step) => steps.append(el("li", { textContent: step })));
     article.append(steps);
+
+    // Save recipe using the logged-in user's session.
+    const saveBtn = el("button", {
+      type: "button",
+      textContent: "Make Recipe"
+    });
+
+    saveBtn.addEventListener("click", async () => {
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Saving...";
+
+      try {
+        await api("/api/saved-recipes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(recipe.title)
+        });
+
+        saveBtn.textContent = "Saved!";
+        setStatus(`Saved "${recipe.title}".`);
+      } catch (error) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Save Recipe";
+        setStatus(error.message, true);
+      }
+    });
+
+    article.append(saveBtn);
     box.append(article);
   });
+
   const list = $("shopping-list");
   list.replaceChildren();
   shopping.forEach((name) => list.append(el("li", { textContent: name })));
