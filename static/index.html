@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -90,6 +89,7 @@
   .row { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
   .row > * { flex: 1 1 160px; }
   .row > button { flex: 0 0 auto; }
+  #add-form .qty { flex: 0 1 150px; }
   #status { min-height: 1.6em; margin: 0 0 12px; color: var(--muted); }
   #status.error { color: var(--warn); font-weight: 600; }
   ul.chips { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 0 0 16px; }
@@ -190,6 +190,10 @@
       <div>
         <label for="new-item">Add something we missed</label>
         <input id="new-item" type="text" autocomplete="off">
+      </div>
+      <div class="qty">
+        <label for="new-quantity">Quantity</label>
+        <input id="new-quantity" type="number" min="0" step="1" inputmode="numeric" placeholder="e.g. 2">
       </div>
       <button class="secondary" type="submit">Add</button>
     </form>
@@ -314,23 +318,46 @@ function busy(id, on) {
   $(id).disabled = on;
 }
 
+// Turn FastAPI/Supabase error shapes into readable text (avoids "[object Object]").
+function errorText(detail) {
+  if (!detail) return "Something went wrong. Try again.";
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail.map((d) => `${(d.loc || []).slice(1).join(".")}: ${d.msg}`).join("; ");
+  }
+  if (detail.message) return detail.message;
+  return JSON.stringify(detail);
+}
+
+// The database column is an integer: always send a whole number or null.
+function toIntOrNull(v) {
+  if (v === null || v === undefined || v === "") return null;
+  if (typeof v === "number") return Number.isFinite(v) && v >= 0 ? Math.round(v) : null;
+  const m = String(v).match(/\d+/); // "about 6" -> 6, "half a carton" -> null
+  return m ? parseInt(m[0], 10) : null;
+}
+
+// Merged: andy's file:// guard + main's default `options = {}`
 async function api(path, options = {}) {
   if (window.location.protocol === "file:") {
     throw new Error("Open FridgeChef through its web server to use ingredient detection.");
   }
   const res = await fetch(path, options);
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.detail || "Something went wrong. Try again.");
+  if (!res.ok) throw new Error(errorText(data.detail));
   return data;
 }
 
-// ---- Ingredient logic ----
+// ---- Ingredient logic (from main) ----
 
+// Save the current ingredient list, including quantities.
 async function saveIngredients() {
   return api("/api/ingredients", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ items })
+    body: JSON.stringify({
+      items: items.map((it) => ({ ...it, quantity_estimate: toIntOrNull(it.quantity_estimate) })),
+    }),
   });
 }
 
@@ -341,9 +368,8 @@ function renderItems() {
   console.log("Ingredients:", items);
 
   items.forEach((it, i) => {
-    const label = it.quantity_estimate
-      ? `${it.name} (${it.quantity_estimate})`
-      : it.name;
+    const hasQty = it.quantity_estimate !== null && it.quantity_estimate !== undefined && it.quantity_estimate !== "";
+    const label = hasQty ? `${it.name} (${it.quantity_estimate})` : it.name;
 
     const remove = el("button", { type: "button", textContent: "×" });
     remove.setAttribute("aria-label", `Remove ${it.name}`);
@@ -373,7 +399,7 @@ function renderItems() {
   $("low-hint").hidden = !items.some((it) => it.confidence === "low");
 }
 
-// ---- Camera and navigation ----
+// ---- Camera and navigation (from andy) ----
 
 async function startCamera() {
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -519,6 +545,7 @@ $("review-detect-btn").addEventListener("click", () => {
   findIngredients(selectedFiles);
 });
 
+// Detect ingredients (andy's camera flow) and save them (main's logic).
 async function findIngredients(files) {
   if (!files.length) {
     setStatus("Choose at least one photo first.", true);
@@ -537,7 +564,7 @@ async function findIngredients(files) {
   selectedFiles.forEach((file) => formData.append("files", file));
   try {
     const data = await api("/api/detect", { method: "POST", body: formData });
-    items = data.items;
+    items = data.items.map((it) => ({ ...it, quantity_estimate: toIntOrNull(it.quantity_estimate) }));
 
     renderItems();
 
@@ -547,6 +574,7 @@ async function findIngredients(files) {
       $("specific-dish").hidden = false;
     }
 
+    // main: always persist the detected list
     await saveIngredients();
 
     if (items.length) {
@@ -576,21 +604,30 @@ $("picker-detect-btn").addEventListener("click", async () => {
   await findIngredients(selectedFiles);
 });
 
+// Add an ingredient manually and save the updated list (main).
 $("add-form").addEventListener("submit", async (e) => {
   e.preventDefault();
 
   const name = $("new-item").value.trim();
+  const qtyRaw = $("new-quantity").value.trim();
   if (!name) return;
 
-  items.push({ name, quantity_estimate: "", confidence: "high" });
+  if (qtyRaw !== "" && !/^\d+$/.test(qtyRaw)) {
+    return setStatus("Quantity must be a whole number, like 2.", true);
+  }
+
+  items.push({ name, quantity_estimate: toIntOrNull(qtyRaw), confidence: "high" });
   $("new-item").value = "";
+  $("new-quantity").value = "";
   renderItems();
 
   try {
     await saveIngredients();
     setStatus(`${name} added and saved.`);
-  } catch (e) {
-    setStatus(e.message, true);
+  } catch (err) {
+    items.pop(); // roll back so the screen matches the database
+    renderItems();
+    setStatus(err.message, true);
   }
 
   $("new-item").focus();
@@ -689,7 +726,6 @@ function renderRecipes(recipes) {
     article.append(el("p", {
       textContent: "You have: " + (recipe.uses.join(", ") || "nothing listed"),
     }));
-
     if (recipe.missing.length) {
       article.append(el("p", {
         className: "need", textContent: "Need to buy: " + recipe.missing.join(", "),
@@ -732,7 +768,6 @@ function renderRecipes(recipes) {
     article.append(saveBtn);
     box.append(article);
   });
-
   const list = $("shopping-list");
   list.replaceChildren();
   shopping.forEach((name) => list.append(el("li", { textContent: name })));

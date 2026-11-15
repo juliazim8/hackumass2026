@@ -1,4 +1,3 @@
-
 import os
 import secrets
 from pathlib import Path
@@ -33,7 +32,7 @@ app.include_router(autorecipe_router)
 # ---------- Schemas ----------
 class Ingredient(BaseModel):
     name: str
-    quantity_estimate: str
+    quantity_estimate: int | None = None  # whole number, or null if unknown
     confidence: str
 
 
@@ -109,16 +108,19 @@ def get_user_id(username: str):
     return users[0]["user_id"]
 
 
+def clean_quantity(value: int | None) -> int | None:
+    """Whole number >= 0, or None if unknown or invalid."""
+    if value is None or value < 0:
+        return None
+    return value
+
+
 def replace_user_ingredients(user_id: int, items: list[Ingredient]) -> int:
     rows = [
         {
             "user_id": user_id,
             "ingredient": item.name.strip(),
-            "quantity_estimate": (
-                int(item.quantity_estimate.strip())
-                if item.quantity_estimate.strip().isdecimal()
-                else None
-            ),
+            "quantity_estimate": clean_quantity(item.quantity_estimate),
         }
         for item in items
         if item.name.strip()
@@ -171,8 +173,10 @@ async def detect(
 
     parts.append(
         "List every identifiable food item in these photos. "
-        "Give a rough quantity ONLY as an integer value and mark confidence honestly "
-        "(high, medium, or low). Do not list items you cannot see."
+        "Give quantity_estimate as a whole-number count (for example 6 eggs), "
+        "or null if the item can't be counted. "
+        "Mark confidence honestly (high, medium, or low). "
+        "Do not list items you cannot see."
     )
 
     pantry = ask_gemini(parts, Pantry)
