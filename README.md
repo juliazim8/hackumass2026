@@ -27,6 +27,11 @@ python -m venv .venv
 
 5) run ```python -m uvicorn main:app --reload```
 
+## Recipe history setup
+
+Run [`database/recipe_history_steps.sql`](database/recipe_history_steps.sql) in the Supabase SQL Editor
+to add storage for recipe ingredients, steps, and the most recent save time.
+
 
 ## Structure
 

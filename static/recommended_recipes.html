@@ -1,0 +1,401 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CookAI | Recommended Recipes</title>
+
+<style>
+  :root {
+    --bg: #eef3f2;
+    --surface: #ffffff;
+    --ink: #10241f;
+    --muted: #586b66;
+    --line: #cfdad7;
+    --green: #245c49;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 30px 20px;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: Arial, sans-serif;
+  }
+
+  .container {
+    max-width: 850px;
+    margin: auto;
+  }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 30px;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 30px;
+  }
+
+  .subtitle {
+    color: var(--muted);
+    margin-top: 8px;
+  }
+
+  button {
+    border: none;
+    border-radius: 10px;
+    padding: 11px 17px;
+    background: var(--green);
+    color: white;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .recipe-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .recipe-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
+    padding: 20px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 13px;
+  }
+
+  .recipe-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .delete-recipe {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    background: #a83e36;
+    font-size: 24px;
+    line-height: 1;
+  }
+
+  .confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 24px;
+  }
+
+  .cancel-delete { background: #586b66; }
+
+  .recipe-name {
+    font-size: 18px;
+    font-weight: bold;
+  }
+
+  .recipe-meta {
+    display: grid;
+    gap: 6px;
+  }
+
+  .recipe-count {
+    color: var(--green);
+    font-size: 14px;
+    font-weight: bold;
+  }
+
+  dialog {
+    width: min(560px, calc(100% - 32px));
+    max-height: 85vh;
+    padding: 24px;
+    border: 0;
+    border-radius: 16px;
+    color: var(--ink);
+    box-shadow: 0 18px 60px #0004;
+  }
+
+  dialog::backdrop { background: #10241f88; }
+
+  .dialog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .dialog-header h2 { margin: 0; }
+  .dialog-header button { flex: 0 0 auto; }
+  .recipe-steps { padding-left: 24px; }
+  .recipe-steps li { margin: 0 0 12px; }
+
+  #status {
+    color: var(--muted);
+    margin-bottom: 20px;
+  }
+
+  .empty {
+    padding: 35px;
+    text-align: center;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    color: var(--muted);
+  }
+
+  @media (max-width: 500px) {
+    header {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+  }
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <header>
+    <div>
+      <h1>Recipe History</h1>
+      <div class="subtitle">Recipes you’ve made and saved.</div>
+    </div>
+
+    <button id="back-btn" type="button">
+      Back
+    </button>
+  </header>
+
+  <div id="status">Loading recipes...</div>
+  <div id="recipes" class="recipe-list"></div>
+
+</div>
+
+<dialog id="recipe-dialog" aria-labelledby="dialog-recipe-name">
+  <div class="dialog-header">
+    <h2 id="dialog-recipe-name"></h2>
+    <button id="recipe-dialog-back" type="button">Back</button>
+  </div>
+  <h3>Ingredients</h3>
+  <ul id="dialog-recipe-ingredients" class="recipe-ingredients"></ul>
+  <h3>Steps</h3>
+  <ol id="dialog-recipe-steps" class="recipe-steps"></ol>
+</dialog>
+
+<dialog id="delete-recipe-dialog" aria-labelledby="delete-recipe-title">
+  <h2 id="delete-recipe-title">Delete recipe?</h2>
+  <p>Delete <strong id="delete-recipe-name"></strong> from your recipe history?</p>
+  <div class="confirm-actions">
+    <button id="cancel-delete" class="cancel-delete" type="button">Cancel</button>
+    <button id="confirm-delete" type="button">Delete</button>
+  </div>
+</dialog>
+
+<script>
+let recipeToDelete = null;
+
+document.getElementById("back-btn").addEventListener("click", () => {
+  if (sessionStorage.getItem("fridgechef-return-state")) {
+    window.location.assign("/?return=previous");
+  } else if (window.history.length > 1) {
+    window.history.back();
+  } else {
+    window.location.assign("/");
+  }
+});
+
+async function loadRecipes() {
+  const container = document.getElementById("recipes");
+  const status = document.getElementById("status");
+
+  try {
+    const response = await fetch("/api/saved-recipes", {
+      credentials: "same-origin"
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.detail || "Could not load recipes.");
+    }
+
+    const recipes = (data.recipes || [])
+      .sort((a, b) => {
+        const timeDifference =
+          Date.parse(b.last_made_at || "") - Date.parse(a.last_made_at || "");
+        return Number.isNaN(timeDifference) || timeDifference === 0
+          ? Number(b.id) - Number(a.id)
+          : timeDifference;
+      });
+
+    container.innerHTML = "";
+
+    if (recipes.length === 0) {
+      container.innerHTML = `
+        <div class="empty">
+          You haven't made any recipes yet!
+        </div>
+      `;
+      status.textContent = "";
+      return;
+    }
+
+    recipes.forEach(recipe => {
+      const card = document.createElement("div");
+      card.className = "recipe-card";
+
+      const name = document.createElement("div");
+      name.className = "recipe-name";
+      name.textContent = recipe.recipe;
+
+      const button = document.createElement("button");
+      button.textContent = "Make Again";
+
+      button.onclick = async () => {
+        button.disabled = true;
+
+        try {
+          const saveResponse = await fetch("/api/saved-recipes", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            credentials: "same-origin",
+            body: JSON.stringify({
+              title: recipe.recipe,
+              ingredients: Array.isArray(recipe.ingredients) ? recipe.ingredients : [],
+              steps: Array.isArray(recipe.steps) ? recipe.steps : [],
+            })
+          });
+
+          const result = await saveResponse.json();
+
+          if (!saveResponse.ok) {
+            throw new Error(result.detail || "Could not update recipe.");
+          }
+          recipe.quantity = result.quantity;
+          showRecipe(recipe);
+
+        } catch (error) {
+          status.textContent = error.message;
+        } finally {
+          button.disabled = false;
+        }
+      };
+
+      const deleteButton = document.createElement("button");
+      deleteButton.className = "delete-recipe";
+      deleteButton.type = "button";
+      deleteButton.textContent = "×";
+      deleteButton.setAttribute("aria-label", `Delete ${recipe.recipe} from history`);
+      deleteButton.addEventListener("click", () => {
+        recipeToDelete = recipe;
+        document.getElementById("delete-recipe-name").textContent = recipe.recipe;
+        document.getElementById("delete-recipe-dialog").showModal();
+      });
+
+      const actions = document.createElement("div");
+      actions.className = "recipe-actions";
+      actions.append(button, deleteButton);
+      card.append(name, actions);
+      container.appendChild(card);
+    });
+
+    status.textContent = "Newest recipes first.";
+
+  } catch (error) {
+    status.textContent = error.message;
+  }
+}
+
+function showRecipe(recipe) {
+  const dialog = document.getElementById("recipe-dialog");
+  document.getElementById("dialog-recipe-name").textContent = recipe.recipe;
+  const ingredients = document.getElementById("dialog-recipe-ingredients");
+  ingredients.replaceChildren();
+  if (Array.isArray(recipe.ingredients) && recipe.ingredients.length) {
+    recipe.ingredients.forEach((ingredient) => {
+      const item = document.createElement("li");
+      item.textContent = ingredient;
+      ingredients.append(item);
+    });
+  } else {
+    const item = document.createElement("li");
+    item.textContent = "No saved ingredients are available for this recipe.";
+    ingredients.append(item);
+  }
+
+  const steps = document.getElementById("dialog-recipe-steps");
+  steps.replaceChildren();
+  if (Array.isArray(recipe.steps) && recipe.steps.length) {
+    recipe.steps.forEach((step) => {
+      const item = document.createElement("li");
+      item.textContent = step;
+      steps.append(item);
+    });
+  } else {
+    const item = document.createElement("li");
+    item.textContent = "No saved steps are available for this recipe.";
+    steps.append(item);
+  }
+  dialog.showModal();
+}
+
+document.getElementById("recipe-dialog-back").addEventListener("click", () => {
+  document.getElementById("recipe-dialog").close();
+});
+
+document.getElementById("cancel-delete").addEventListener("click", () => {
+  document.getElementById("delete-recipe-dialog").close();
+  recipeToDelete = null;
+});
+
+document.getElementById("confirm-delete").addEventListener("click", async (event) => {
+  if (!recipeToDelete) return;
+
+  const button = event.currentTarget;
+  const status = document.getElementById("status");
+  button.disabled = true;
+  try {
+    const response = await fetch(
+      `/api/saved-recipes/${encodeURIComponent(recipeToDelete.id)}`,
+      { method: "DELETE", credentials: "same-origin" }
+    );
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.detail || "Could not delete recipe.");
+    }
+
+    document.getElementById("delete-recipe-dialog").close();
+    recipeToDelete = null;
+    await loadRecipes();
+  } catch (error) {
+    status.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+loadRecipes();
+</script>
+
+</body>
+</html>

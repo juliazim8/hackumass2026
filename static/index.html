@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>FridgeChef</title>
+<title>CookAI</title>
 <style>
   :root {
     color-scheme: light;
@@ -89,6 +89,7 @@
   .row { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
   .row > * { flex: 1 1 160px; }
   .row > button { flex: 0 0 auto; }
+  #add-form .qty { flex: 0 1 150px; }
   #status { min-height: 1.6em; margin: 0 0 12px; color: var(--muted); }
   #status.error { color: var(--warn); font-weight: 600; }
   ul.chips { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 0 0 16px; }
@@ -103,6 +104,20 @@
   }
   .hint { color: var(--muted); font-size: .9rem; margin: 8px 0 0; }
   .check { display: flex; gap: 8px; align-items: center; font-weight: 400; margin: 0; }
+
+  /* Shopping filter (from the filter version) */
+  .shopping-mode { border: 0; padding: 0; margin: 16px 0 0; }
+  .shopping-mode legend { font-weight: 600; margin-bottom: 8px; }
+  .shopping-options { display: flex; flex-wrap: wrap; gap: 8px; }
+  .shopping-option {
+    display: flex; align-items: center; gap: 8px; margin: 0; padding: 9px 12px;
+    border: 1px solid var(--line); border-radius: 8px; font-weight: 400;
+  }
+  .shopping-option input { margin: 0; accent-color: var(--accent); }
+  .shopping-range { display: flex; align-items: end; gap: 10px; margin-top: 12px; }
+  .shopping-range > div { flex: 1 1 120px; }
+  .shopping-range input { max-width: 180px; }
+
   .recipe { border-top: 1px solid var(--line); padding: 16px 0; }
   .recipe:first-of-type { border-top: none; padding-top: 0; }
   .meta { color: var(--muted); margin: 0 0 8px; }
@@ -135,9 +150,12 @@
 </head>
 <body>
 <header id="app-header">
-  <p class="brand">FridgeChef</p>
+  <p class="brand">CookAI</p>
   <div class="header-actions">
     <button class="secondary" type="button" data-open-picker>Choose photos</button>
+    <button id="recommended-recipes-btn" type="button">
+      Recipe History
+    </button>
     <button class="secondary" type="button" data-logout>Sign out</button>
   </div>
 </header>
@@ -173,6 +191,10 @@
         <label for="new-item">Add something we missed</label>
         <input id="new-item" type="text" autocomplete="off">
       </div>
+      <div class="qty">
+        <label for="new-quantity">Quantity</label>
+        <input id="new-quantity" type="number" min="0" step="1" inputmode="numeric" value="1">
+      </div>
       <button class="secondary" type="submit">Add</button>
     </form>
   </section>
@@ -190,6 +212,26 @@
       </div>
     </div>
     <p><label class="check"><input id="staples" type="checkbox" checked> Assume salt, pepper, oil, and water</label></p>
+
+    <fieldset class="shopping-mode">
+      <legend>Shopping preference</legend>
+      <div class="shopping-options">
+        <label class="shopping-option"><input type="radio" name="shopping-mode" value="no" checked> Use only my ingredients</label>
+        <label class="shopping-option"><input type="radio" name="shopping-mode" value="yes"> I’m willing to shop</label>
+      </div>
+      <div id="shopping-range" class="shopping-range" hidden>
+        <div>
+          <label for="min-missing-items">Buy at least</label>
+          <input id="min-missing-items" type="number" min="0" max="20" value="0">
+        </div>
+        <div>
+          <label for="max-missing-items">No more than</label>
+          <input id="max-missing-items" type="number" min="0" max="20" value="3">
+        </div>
+        <p class="hint">Shopping needs are shown separately for each recipe.</p>
+      </div>
+    </fieldset>
+
     <p><button id="recipes-btn" type="button">Suggest recipes</button></p>
     <p class="hint">Dietary filters are a best effort. If you have an allergy, check every ingredient yourself.</p>
   </section>
@@ -252,12 +294,49 @@
 <script>
 const $ = (id) => document.getElementById(id);
 let items = [];
+let generatedRecipes = null;
+let savedRecipeTitles = new Set();
 let cameraStream = null;
 let capturedFile = null;
 let selectedFiles = [];
 let pickerFiles = [];
 let capturedUrl = "";
 let pickerUrls = [];
+
+function openReturnPhotoStore() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open("fridgechef-navigation", 1);
+    request.onupgradeneeded = () => {
+      request.result.createObjectStore("state");
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function saveReturnPhotos(files) {
+  const database = await openReturnPhotoStore();
+  await new Promise((resolve, reject) => {
+    const transaction = database.transaction("state", "readwrite");
+    transaction.objectStore("state").put(files, "selected-photos");
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error);
+  });
+  database.close();
+}
+
+async function loadReturnPhotos() {
+  const database = await openReturnPhotoStore();
+  const files = await new Promise((resolve, reject) => {
+    const transaction = database.transaction("state", "readonly");
+    const request = transaction.objectStore("state").get("selected-photos");
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  });
+  database.close();
+  return files;
+}
 
 function el(tag, props = {}, ...kids) {
   const n = document.createElement(tag);
@@ -276,14 +355,33 @@ function busy(id, on) {
   $(id).disabled = on;
 }
 
+// Turn FastAPI/Supabase error shapes into readable text (avoids "[object Object]").
+function errorText(detail) {
+  if (!detail) return "Something went wrong. Try again.";
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail.map((d) => `${(d.loc || []).slice(1).join(".")}: ${d.msg}`).join("; ");
+  }
+  if (detail.message) return detail.message;
+  return JSON.stringify(detail);
+}
+
+// The database column is an integer: always send a whole number or null.
+function toIntOrNull(v) {
+  if (v === null || v === undefined || v === "") return null;
+  if (typeof v === "number") return Number.isFinite(v) && v >= 0 ? Math.round(v) : null;
+  const m = String(v).match(/\d+/); // "about 6" -> 6, "half a carton" -> null
+  return m ? parseInt(m[0], 10) : null;
+}
+
 // Merged: andy's file:// guard + main's default `options = {}`
 async function api(path, options = {}) {
   if (window.location.protocol === "file:") {
-    throw new Error("Open FridgeChef through its web server to use ingredient detection.");
+    throw new Error("Open CookAI through its web server to use ingredient detection.");
   }
   const res = await fetch(path, options);
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.detail || "Something went wrong. Try again.");
+  if (!res.ok) throw new Error(errorText(data.detail));
   return data;
 }
 
@@ -294,7 +392,9 @@ async function saveIngredients() {
   return api("/api/ingredients", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ items })
+    body: JSON.stringify({
+      items: items.map((it) => ({ ...it, quantity_estimate: toIntOrNull(it.quantity_estimate) })),
+    }),
   });
 }
 
@@ -305,9 +405,8 @@ function renderItems() {
   console.log("Ingredients:", items);
 
   items.forEach((it, i) => {
-    const label = it.quantity_estimate
-      ? `${it.name} (${it.quantity_estimate})`
-      : it.name;
+    const hasQty = it.quantity_estimate !== null && it.quantity_estimate !== undefined && it.quantity_estimate !== "";
+    const label = hasQty ? `${it.name} (${it.quantity_estimate})` : it.name;
 
     const remove = el("button", { type: "button", textContent: "×" });
     remove.setAttribute("aria-label", `Remove ${it.name}`);
@@ -502,7 +601,7 @@ async function findIngredients(files) {
   selectedFiles.forEach((file) => formData.append("files", file));
   try {
     const data = await api("/api/detect", { method: "POST", body: formData });
-    items = data.items;
+    items = data.items.map((it) => ({ ...it, quantity_estimate: toIntOrNull(it.quantity_estimate) }));
 
     renderItems();
 
@@ -547,25 +646,45 @@ $("add-form").addEventListener("submit", async (e) => {
   e.preventDefault();
 
   const name = $("new-item").value.trim();
+  const qtyRaw = $("new-quantity").value.trim();
   if (!name) return;
 
-  items.push({ name, quantity_estimate: "", confidence: "high" });
+  if (qtyRaw !== "" && !/^\d+$/.test(qtyRaw)) {
+    return setStatus("Quantity must be a whole number, like 2.", true);
+  }
+
+  items.push({ name, quantity_estimate: toIntOrNull(qtyRaw) ?? 1, confidence: "high" });
   $("new-item").value = "";
+  $("new-quantity").value = "1";
   renderItems();
 
   try {
     await saveIngredients();
     setStatus(`${name} added and saved.`);
-  } catch (e) {
-    setStatus(e.message, true);
+  } catch (err) {
+    items.pop(); // roll back so the screen matches the database
+    renderItems();
+    setStatus(err.message, true);
   }
 
   $("new-item").focus();
 });
 
-// Generate recipes.
+// Generate recipes (now with the shopping filter).
 $("recipes-btn").addEventListener("click", async () => {
   if (!items.length) return setStatus("Add at least one ingredient.", true);
+
+  const allowShopping =
+    document.querySelector('input[name="shopping-mode"]:checked').value === "yes";
+  const minMissingItems = Number($("min-missing-items").value);
+  const maxMissingItems = Number($("max-missing-items").value);
+
+  if (allowShopping && (
+    !Number.isInteger(minMissingItems) || !Number.isInteger(maxMissingItems) ||
+    minMissingItems < 0 || maxMissingItems > 20 || minMissingItems > maxMissingItems
+  )) {
+    return setStatus("Choose a shopping range from 0 to 20, with the minimum no greater than the maximum.", true);
+  }
 
   busy("recipes-btn", true);
   setStatus("Cooking up ideas…");
@@ -579,9 +698,13 @@ $("recipes-btn").addEventListener("click", async () => {
         diet: $("diet").value.trim(),
         max_minutes: Number($("minutes").value) || 45,
         assume_staples: $("staples").checked,
+        allow_shopping: allowShopping,
+        min_missing_items: minMissingItems,
+        max_missing_items: maxMissingItems,
       }),
     });
 
+    savedRecipeTitles.clear();
     renderRecipes(data.recipes);
     setStatus("");
   } catch (error) {
@@ -589,6 +712,13 @@ $("recipes-btn").addEventListener("click", async () => {
   } finally {
     busy("recipes-btn", false);
   }
+});
+
+// Show the range inputs only when the user is willing to shop.
+document.querySelectorAll('input[name="shopping-mode"]').forEach((input) => {
+  input.addEventListener("change", () => {
+    $("shopping-range").hidden = input.value !== "yes";
+  });
 });
 
 $("specific-recipe-btn").addEventListener("click", async () => {
@@ -609,6 +739,7 @@ $("specific-recipe-btn").addEventListener("click", async () => {
         assume_staples: $("staples").checked,
       }),
     });
+    savedRecipeTitles.clear();
     renderRecipes([data.recipe]);
     setStatus("");
   } catch (error) {
@@ -619,9 +750,15 @@ $("specific-recipe-btn").addEventListener("click", async () => {
 });
 
 function renderRecipes(recipes) {
+  generatedRecipes = recipes;
   const box = $("recipe-list");
   box.replaceChildren();
   const shopping = new Map();
+
+  if (!recipes.length) {
+    box.append(el("p", { textContent: "No recipes matched those ingredients and shopping preferences. Try a wider shopping range." }));
+  }
+
   recipes.forEach((recipe) => {
     const article = el("article", { className: "recipe" });
     article.append(el("h3", { textContent: recipe.title }));
@@ -635,12 +772,46 @@ function renderRecipes(recipes) {
       }));
       recipe.missing.forEach((name) => shopping.set(name.toLowerCase(), name));
     } else {
-      article.append(el("p", { textContent: "Nothing to buy." }));
+      article.append(el("p", { textContent: "Nothing to buy for this recipe." }));
     }
 
     const steps = el("ol");
     recipe.steps.forEach((step) => steps.append(el("li", { textContent: step })));
     article.append(steps);
+
+    // Save recipe using the logged-in user's session.
+    const saveBtn = el("button", {
+      type: "button",
+      textContent: savedRecipeTitles.has(recipe.title) ? "Saved!" : "Make Recipe",
+      disabled: savedRecipeTitles.has(recipe.title),
+    });
+
+    saveBtn.addEventListener("click", async () => {
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Saving...";
+
+      try {
+        await api("/api/saved-recipes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: recipe.title,
+            ingredients: [...new Set([...recipe.uses, ...recipe.missing])],
+            steps: recipe.steps,
+          })
+        });
+
+        savedRecipeTitles.add(recipe.title);
+        saveBtn.textContent = "Saved!";
+        setStatus(`Saved "${recipe.title}".`);
+      } catch (error) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Save Recipe";
+        setStatus(error.message, true);
+      }
+    });
+
+    article.append(saveBtn);
     box.append(article);
   });
   const list = $("shopping-list");
@@ -653,7 +824,88 @@ function renderRecipes(recipes) {
 }
 
 window.addEventListener("pagehide", stopCamera);
-startCamera();
+
+async function openRecommendedRecipes() {
+  const button = $("recommended-recipes-btn");
+  button.disabled = true;
+  const returnState = {
+    featurePage: !$("feature-page").hidden,
+    items,
+    diet: $("diet").value,
+    minutes: $("minutes").value,
+    staples: $("staples").checked,
+    shoppingMode: document.querySelector('input[name="shopping-mode"]:checked')?.value || "no",
+    minMissingItems: $("min-missing-items").value,
+    maxMissingItems: $("max-missing-items").value,
+    recipes: generatedRecipes,
+    savedRecipeTitles: [...savedRecipeTitles],
+  };
+  try {
+    sessionStorage.setItem("fridgechef-return-state", JSON.stringify(returnState));
+    await saveReturnPhotos(selectedFiles);
+    window.location.assign("/recommended_recipes.html");
+  } catch (error) {
+    if (!$("feature-page").hidden) {
+      setStatus(`Couldn’t preserve your photos for returning from Recipe History: ${error.message}`, true);
+    } else {
+      $("camera-message").textContent = `Couldn’t preserve your photos for returning from Recipe History: ${error.message}`;
+    }
+    button.disabled = false;
+  }
+}
+
+$("recommended-recipes-btn").addEventListener("click", openRecommendedRecipes);
+
+async function restorePreviousPage() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("return") !== "previous") {
+    startCamera();
+    return;
+  }
+
+  const savedState = sessionStorage.getItem("fridgechef-return-state");
+  sessionStorage.removeItem("fridgechef-return-state");
+  if (!savedState) {
+    startCamera();
+    return;
+  }
+
+  try {
+    const state = JSON.parse(savedState);
+    if (!state.featurePage) {
+      startCamera();
+      return;
+    }
+
+    items = Array.isArray(state.items) ? state.items : [];
+    $("diet").value = state.diet || "";
+    $("minutes").value = state.minutes || "45";
+    $("staples").checked = Boolean(state.staples);
+    $("min-missing-items").value = state.minMissingItems || "0";
+    $("max-missing-items").value = state.maxMissingItems || "3";
+    const shoppingMode = [...document.querySelectorAll('input[name="shopping-mode"]')]
+      .find((input) => input.value === state.shoppingMode);
+    if (shoppingMode) shoppingMode.checked = true;
+    $("shopping-range").hidden = state.shoppingMode !== "yes";
+    selectedFiles = await loadReturnPhotos();
+    savedRecipeTitles = new Set(
+      Array.isArray(state.savedRecipeTitles) ? state.savedRecipeTitles : []
+    );
+    showFeatures();
+    renderItems();
+    if (Array.isArray(state.recipes)) renderRecipes(state.recipes);
+    $("ingredients").hidden = false;
+    $("prefs").hidden = false;
+    $("specific-dish").hidden = false;
+    setStatus("Returned to your previous page.");
+  } catch (error) {
+    sessionStorage.removeItem("fridgechef-return-state");
+    $("camera-message").textContent = "Couldn’t restore your previous page. Starting the camera instead.";
+    startCamera();
+  }
+}
+
+restorePreviousPage();
 </script>
 </body>
 </html>
